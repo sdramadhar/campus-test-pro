@@ -1,0 +1,1 @@
+"campustest" "replace-with-scram-or-md5-password-hash"

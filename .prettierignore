@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+coverage/
+test-results/
+playwright-report/
+backups/
+storage/
+apps/api/generated/
+apps/api/dist/
+apps/web/.next/
+apps/web/tsconfig.tsbuildinfo
+apps/worker/dist/
+package-lock.json

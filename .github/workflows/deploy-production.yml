@@ -1,0 +1,41 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+      - name: Build immutable images
+        run: |
+          docker build -f Dockerfile.api -t "$REGISTRY/campustest-api:${GITHUB_SHA}" .
+          docker build -f Dockerfile.worker -t "$REGISTRY/campustest-worker:${GITHUB_SHA}" .
+          docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_API_URL="$PRODUCTION_API_URL" -t "$REGISTRY/campustest-web:${GITHUB_SHA}" .
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+      - name: Push images
+        run: echo "Push images after registry login supplied by production environment secrets."
+      - name: Backup database
+        run: echo "Run a provider backup or scripts/backup-postgres.ps1 before risky migrations."
+      - name: Run migration release job
+        run: echo "Run a single migration job using DIRECT_DATABASE_URL; fail deployment on migration failure."
+      - name: Deploy services
+        run: echo "Deploy web, api, and worker with immutable image tag ${GITHUB_SHA}."
+      - name: Health check and rollback gate
+        run: echo "Check /health and /ready; stop or roll back if health checks fail."

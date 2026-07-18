@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: campustest_pro
+          POSTGRES_USER: campustest
+          POSTGRES_PASSWORD: campustest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campustest -d campustest_pro"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://campustest:campustest@localhost:5432/campustest_pro?schema=public
+      DIRECT_DATABASE_URL: postgresql://campustest:campustest@localhost:5432/campustest_pro?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-change-outside-prod
+      JWT_REFRESH_SECRET: ci-refresh-secret-change-outside-prod
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      WORKER_REQUIRED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run db:generate
+      - run: npm run db:migrate:deploy
+      - run: npm run db:migrate:status
+      - run: npm run db:seed:dev
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+      - run: npm audit --audit-level=moderate
+      - run: docker build -f Dockerfile.api -t campustest-api:${{ github.sha }} .
+      - run: docker build -f Dockerfile.worker -t campustest-worker:${{ github.sha }} .
+      - run: docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_API_URL=http://localhost:4000 -t campustest-web:${{ github.sha }} .

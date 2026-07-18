@@ -1,0 +1,163 @@
+import { apiUrl } from "./auth";
+
+export interface StudentAssessment {
+  id: string;
+  title: string;
+  description?: string | null;
+  instructions?: string | null;
+  durationMinutes: number;
+  totalMarks: number;
+  passingMarks?: number | null;
+  maxAttempts: number;
+  startAt?: string | null;
+  endAt?: string | null;
+  status: string;
+  windowState: string;
+  questionCount: number;
+  latestAttempt?: { id: string; status: string; attemptNumber: number } | null;
+  publishedResultId?: string | null;
+  eligibility?: { eligible: boolean; errors: string[] };
+}
+
+export interface AttemptQuestion {
+  id: string;
+  sectionId?: string | null;
+  displayOrder: number;
+  questionType: string;
+  questionText: string;
+  options?: Array<{ optionKey: string; optionText: string }> | null;
+  assignedMarks: number;
+  mandatory: boolean;
+  metadata?: Record<string, unknown> | null;
+  answer?: SavedAnswer | null;
+}
+
+export interface SavedAnswer {
+  id: string;
+  attemptQuestionId: string;
+  selectedOptionKeys: string[];
+  textAnswer?: string | null;
+  numericalAnswer?: number | null;
+  markedForReview: boolean;
+  version: number;
+  updatedAt: string;
+}
+
+export interface StudentAttempt {
+  id: string;
+  assessmentId: string;
+  status: string;
+  attemptNumber: number;
+  startedAt: string;
+  expiresAt: string;
+  assessment: {
+    id: string;
+    title: string;
+    instructions?: string | null;
+    allowBackNavigation: boolean;
+  };
+  sections: Array<{ id: string; name: string; displayOrder: number }>;
+  questions: AttemptQuestion[];
+  receipt?: SubmissionReceipt | null;
+}
+
+export interface SubmissionReceipt {
+  id: string;
+  receiptNumber: string;
+  submittedAt: string;
+  answerCount: number;
+  unansweredCount: number;
+  status: string;
+}
+
+export interface StudentResult {
+  id: string;
+  assessmentId: string;
+  attemptId: string;
+  assessment?: { title: string };
+  objectiveScore: number;
+  descriptiveScore: number;
+  codingScore: number;
+  totalScore: number;
+  percentage: number;
+  passStatus: string;
+  correctCount: number;
+  incorrectCount: number;
+  unansweredCount: number;
+  attemptedCount: number;
+  evaluationStatus: string;
+  publishedAt?: string | null;
+  sectionResults?: Array<{
+    sectionName: string;
+    totalMarks: number;
+    awardedMarks: number;
+  }>;
+}
+
+interface ApiResponse<T> {
+  success: true;
+  data: T;
+}
+
+export async function studentExamRequest<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  const response = await fetch(`${apiUrl}${path}`, {
+    ...init,
+    credentials: "include",
+    headers,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = (await response
+      .json()
+      .catch((): { message?: unknown } => ({ message: "Request failed" }))) as {
+      message?: unknown;
+    };
+    const message = Array.isArray(body.message)
+      ? body.message
+          .filter((item): item is string => typeof item === "string")
+          .join(", ")
+      : typeof body.message === "string"
+        ? body.message
+        : "Request failed";
+    throw new Error(message);
+  }
+  const body = (await response.json()) as ApiResponse<T>;
+  return body.data;
+}
+
+export function answerBody(
+  question: AttemptQuestion,
+  value: unknown,
+  markedForReview = false,
+) {
+  if (
+    question.questionType === "SINGLE_CHOICE" ||
+    question.questionType === "TRUE_FALSE"
+  ) {
+    return {
+      selectedOptionKeys: typeof value === "string" ? [value] : [],
+      markedForReview,
+    };
+  }
+  if (question.questionType === "MULTIPLE_CHOICE") {
+    return {
+      selectedOptionKeys: Array.isArray(value) ? value : [],
+      markedForReview,
+    };
+  }
+  if (question.questionType === "NUMERICAL") {
+    return {
+      numericalAnswer: value === "" ? undefined : Number(value),
+      markedForReview,
+    };
+  }
+  return {
+    textAnswer: typeof value === "string" ? value : "",
+    markedForReview,
+  };
+}

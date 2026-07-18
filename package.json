@@ -1,0 +1,38 @@
+{
+  "name": "campustest-pro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CampusTest Pro monorepo for college assessment delivery and administration.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace apps/api\" \"npm run dev --workspace apps/web\"",
+    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web && npm run build --workspace apps/worker",
+    "lint": "npm run lint --workspace apps/api && npm run lint --workspace apps/web && npm run lint --workspace apps/worker",
+    "test": "npm run test --workspace apps/api",
+    "typecheck": "npm run typecheck --workspace apps/api && npm run typecheck --workspace apps/web && npm run typecheck --workspace apps/worker",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "npm run prisma:generate --workspace apps/api",
+    "db:migrate": "npm run prisma:migrate --workspace apps/api",
+    "db:migrate:deploy": "npm run prisma:migrate --workspace apps/api",
+    "db:migrate:status": "npm --workspace apps/api exec prisma migrate status",
+    "db:seed": "npm run prisma:seed --workspace apps/api",
+    "db:seed:dev": "npm run prisma:seed --workspace apps/api",
+    "db:backup": "powershell -ExecutionPolicy Bypass -File scripts/backup-postgres.ps1",
+    "db:restore:docs": "powershell -ExecutionPolicy Bypass -File scripts/restore-postgres.ps1 -Help",
+    "docker:build": "docker build -f Dockerfile.api -t campustest-api:local . && docker build -f Dockerfile.web -t campustest-web:local . && docker build -f Dockerfile.worker -t campustest-worker:local .",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2"
+  },
+  "engines": {
+    "node": ">=20.11.0",
+    "npm": ">=10.0.0"
+  }
+}
