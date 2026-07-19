@@ -123,6 +123,17 @@ Phase 8 exam operations routes:
 - `POST /api/v1/security-events/attempts/:attemptId/review`
 - `GET /api/v1/system/queues`
 
+Phase 10 admin panel routes:
+
+- `GET /api/v1/admin-panel/dashboard`
+- `GET|PATCH /api/v1/admin-panel/college-settings`
+- `GET|PATCH /api/v1/admin-panel/profile`
+- `GET /api/v1/admin-panel/notifications`
+- `PATCH /api/v1/admin-panel/notifications/:id/read`
+- `GET /api/v1/admin-panel/audit-logs`
+- `GET /api/v1/admin-panel/activity-history`
+- `GET|PATCH /api/v1/admin-panel/permissions`
+
 Frontend routes:
 
 - `/login`
@@ -130,6 +141,21 @@ Frontend routes:
 - `/dashboard/college-admin`
 - `/dashboard/faculty`
 - `/dashboard/student`
+- `/admin`
+- `/admin/students`
+- `/admin/faculty`
+- `/admin/departments`
+- `/admin/courses`
+- `/admin/semesters`
+- `/admin/subjects`
+- `/admin/batches`
+- `/admin/assignments`
+- `/admin/college-settings`
+- `/admin/permissions`
+- `/admin/profile`
+- `/admin/notifications`
+- `/admin/audit-logs`
+- `/admin/activity`
 - `/super-admin/colleges`
 - `/super-admin/colleges/new`
 - `/super-admin/colleges/[id]`
@@ -188,6 +214,8 @@ The seed also creates development-only academic data for Demo College: a CSE dep
 Phase 6 seed data adds tags, single-choice, multiple-choice, true/false, numerical, descriptive, fill-in-the-blank, and coding questions, plus draft and scheduled assessments. Phase 7 seed data adds an active student-assigned exam, an upcoming exam, a completed attempt, a published result, and a pending descriptive manual review task.
 
 Phase 8 seed data adds an expired attempt for auto-submit recovery, job records, a notification, a security review signal, and moderation history.
+
+Phase 10 seed data adds Demo College admin settings, admin-panel notifications, activity-history records, and a development permission override.
 
 Coding questions store test cases and hidden-case metadata, but CampusTest Pro does not execute untrusted code yet. Browser exam events are review signals only; they do not automatically declare misconduct.
 

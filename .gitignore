@@ -28,6 +28,8 @@ coverage/
 **/docker-secrets/
 test-results/
 playwright-report/
+*-SDRAMADHAR0001.*
+**/*-SDRAMADHAR0001.*
 
 apps/api/dist/
 apps/api/generated/

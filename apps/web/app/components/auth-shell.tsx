@@ -6,16 +6,22 @@ import {
   Building2,
   CalendarDays,
   Activity,
+  Bell,
   BarChart3,
   ClipboardList,
+  FileClock,
   GraduationCap,
+  History,
   Layers,
   LibraryBig,
   ListChecks,
   LogOut,
+  Moon,
   NotebookPen,
+  Settings,
   Shield,
   UserCheck,
+  UserCog,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -47,7 +53,13 @@ type NavIcon =
   | "results"
   | "reviews"
   | "operations"
-  | "queues";
+  | "queues"
+  | "settings"
+  | "permissions"
+  | "notifications"
+  | "audit"
+  | "activity"
+  | "profile";
 
 const adminRoles: UserRole[] = ["SUPER_ADMIN", "COLLEGE_ADMIN"];
 
@@ -58,8 +70,8 @@ const navItems: Array<{
   icon: NavIcon;
 }> = [
   {
-    roles: ["SUPER_ADMIN"],
-    href: "/dashboard/super-admin",
+    roles: adminRoles,
+    href: "/admin",
     label: "Dashboard",
     icon: "shield",
   },
@@ -70,52 +82,82 @@ const navItems: Array<{
     icon: "building",
   },
   {
-    roles: ["COLLEGE_ADMIN"],
-    href: "/dashboard/college-admin",
-    label: "College Admin",
-    icon: "building",
-  },
-  {
     roles: adminRoles,
-    href: "/academic/departments",
+    href: "/admin/departments",
     label: "Departments",
     icon: "department",
   },
   {
     roles: adminRoles,
-    href: "/academic/courses",
+    href: "/admin/courses",
     label: "Courses",
     icon: "course",
   },
   {
     roles: adminRoles,
-    href: "/academic/semesters",
+    href: "/admin/semesters",
     label: "Semesters",
     icon: "semester",
   },
   {
     roles: adminRoles,
-    href: "/academic/subjects",
+    href: "/admin/subjects",
     label: "Subjects",
     icon: "subject",
   },
   {
     roles: adminRoles,
-    href: "/academic/batches",
+    href: "/admin/batches",
     label: "Batches",
     icon: "batch",
   },
   {
     roles: adminRoles,
-    href: "/academic/faculty",
+    href: "/admin/faculty",
     label: "Faculty",
     icon: "user",
   },
   {
     roles: adminRoles,
-    href: "/academic/students",
+    href: "/admin/students",
     label: "Students",
     icon: "users",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/college-settings",
+    label: "College Settings",
+    icon: "settings",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/permissions",
+    label: "Permissions",
+    icon: "permissions",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY", "STUDENT"],
+    href: "/admin/profile",
+    label: "Profile",
+    icon: "profile",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY", "STUDENT"],
+    href: "/admin/notifications",
+    label: "Notifications",
+    icon: "notifications",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/audit-logs",
+    label: "Audit Logs",
+    icon: "audit",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/activity",
+    label: "Activity",
+    icon: "activity",
   },
   {
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
@@ -220,6 +262,13 @@ export function AuthShell({
     };
   }, [allowedRoles, router]);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("campustest-theme");
+    if (savedTheme === "dark" || savedTheme === "light") {
+      document.documentElement.dataset.theme = savedTheme;
+    }
+  }, []);
+
   const visibleNav = useMemo(
     () =>
       navItems.filter((item) =>
@@ -235,6 +284,13 @@ export function AuthShell({
       credentials: "include",
     }).catch(() => undefined);
     router.replace("/login");
+  }
+
+  function toggleTheme(): void {
+    const current = document.documentElement.dataset.theme;
+    const next = current === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("campustest-theme", next);
   }
 
   if (status === "loading") {
@@ -293,10 +349,24 @@ export function AuthShell({
                 )}
                 {item.icon === "operations" && <Activity aria-hidden="true" />}
                 {item.icon === "queues" && <BarChart3 aria-hidden="true" />}
+                {item.icon === "settings" && <Settings aria-hidden="true" />}
+                {item.icon === "permissions" && <UserCog aria-hidden="true" />}
+                {item.icon === "notifications" && <Bell aria-hidden="true" />}
+                {item.icon === "audit" && <FileClock aria-hidden="true" />}
+                {item.icon === "activity" && <History aria-hidden="true" />}
+                {item.icon === "profile" && <UserCheck aria-hidden="true" />}
                 {item.label}
               </Link>
             ))}
           </nav>
+          <button
+            className="sidebar-button"
+            onClick={toggleTheme}
+            type="button"
+          >
+            <Moon aria-hidden="true" />
+            Dark Mode
+          </button>
           <button
             className="sidebar-button"
             onClick={() => void logout()}

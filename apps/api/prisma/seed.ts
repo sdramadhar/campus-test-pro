@@ -1225,6 +1225,12 @@ async function main(): Promise<void> {
       title: "Result published",
     },
   });
+  await prisma.notification.deleteMany({
+    where: {
+      userId: collegeAdmin.id,
+      title: "Admin panel ready",
+    },
+  });
   await prisma.notification.create({
     data: {
       collegeId: demoCollege.id,
@@ -1233,6 +1239,89 @@ async function main(): Promise<void> {
       status: NotificationStatus.UNREAD,
       title: "Result published",
       message: "Your seeded Phase 7 result is available.",
+    },
+  });
+
+  await prisma.collegeSettings.upsert({
+    where: { collegeId: demoCollege.id },
+    update: {
+      timezone: "Asia/Kolkata",
+      academicYearStartMonth: 6,
+      brandingColor: "#0f5d4e",
+      notificationsEnabled: true,
+      examGraceMinutes: 5,
+      updatedById: collegeAdmin.id,
+    },
+    create: {
+      collegeId: demoCollege.id,
+      timezone: "Asia/Kolkata",
+      academicYearStartMonth: 6,
+      brandingColor: "#0f5d4e",
+      notificationsEnabled: true,
+      examGraceMinutes: 5,
+      updatedById: collegeAdmin.id,
+    },
+  });
+
+  await prisma.userPermissionOverride.upsert({
+    where: {
+      userId_module: {
+        userId: collegeAdmin.id,
+        module: "students",
+      },
+    },
+    update: {
+      collegeId: demoCollege.id,
+      canView: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: false,
+    },
+    create: {
+      userId: collegeAdmin.id,
+      collegeId: demoCollege.id,
+      module: "students",
+      canView: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: false,
+    },
+  });
+
+  await prisma.activityHistory.deleteMany({
+    where: {
+      collegeId: demoCollege.id,
+      action: { in: ["SEED_ADMIN_PANEL", "SEED_STUDENT_IMPORT"] },
+    },
+  });
+  await prisma.activityHistory.createMany({
+    data: [
+      {
+        collegeId: demoCollege.id,
+        userId: superAdmin.id,
+        action: "SEED_ADMIN_PANEL",
+        summary: "Phase 10 admin dashboard demo data prepared.",
+        metadata: { phase: 10 },
+      },
+      {
+        collegeId: demoCollege.id,
+        userId: collegeAdmin.id,
+        action: "SEED_STUDENT_IMPORT",
+        summary: "Demo student roster is ready for import/export testing.",
+        metadata: { records: 1 },
+      },
+    ],
+  });
+
+  await prisma.notification.create({
+    data: {
+      collegeId: demoCollege.id,
+      userId: collegeAdmin.id,
+      type: NotificationType.ACCOUNT_STATUS_CHANGE,
+      status: NotificationStatus.UNREAD,
+      title: "Admin panel ready",
+      message: "Phase 10 management tools are seeded for Demo College.",
+      metadata: { phase: 10 },
     },
   });
 

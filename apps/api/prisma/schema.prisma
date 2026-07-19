@@ -17,6 +17,12 @@ enum Role {
   STUDENT
 }
 
+enum ThemePreference {
+  SYSTEM
+  LIGHT
+  DARK
+}
+
 enum AuditEvent {
   LOGIN_SUCCESS
   LOGIN_FAILURE
@@ -56,6 +62,10 @@ enum AuditEvent {
   EMAIL_DELIVERED
   EMAIL_FAILED
   MAINTENANCE_MODE_UPDATE
+  ADMIN_SETTINGS_UPDATE
+  PROFILE_UPDATE
+  NOTIFICATION_READ
+  PERMISSION_OVERRIDE_UPDATE
 }
 
 enum EmailProvider {
@@ -249,6 +259,7 @@ model User {
   passwordHash String?
   mustChangePassword Boolean @default(false)
   isActive    Boolean      @default(true)
+  themePreference ThemePreference @default(SYSTEM)
   collegeId   String?
   college     College?     @relation("CollegeUsers", fields: [collegeId], references: [id])
   collegesCreated College[] @relation("CollegeCreatedBy")
@@ -274,6 +285,8 @@ model User {
   codeExecutionJobs CodeExecutionJob[]
   refreshTokens RefreshToken[]
   auditLogs    AuditLog[]
+  activityHistory ActivityHistory[]
+  permissionOverrides UserPermissionOverride[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -318,6 +331,9 @@ model College {
   testAttempts TestAttempt[]
   results      Result[]
   notifications Notification[]
+  settings      CollegeSettings?
+  activityHistory ActivityHistory[]
+  permissionOverrides UserPermissionOverride[]
   storageObjects StorageObject[]
   codeExecutionJobs CodeExecutionJob[]
   createdAt    DateTime      @default(now())
@@ -360,6 +376,58 @@ model AuditLog {
   @@index([event])
   @@index([userId])
   @@index([collegeId])
+}
+
+model CollegeSettings {
+  id                     String   @id @default(cuid())
+  collegeId              String   @unique
+  college                College  @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  timezone               String   @default("Asia/Kolkata")
+  academicYearStartMonth Int      @default(6)
+  brandingColor          String   @default("#0f5d4e")
+  notificationsEnabled   Boolean  @default(true)
+  examGraceMinutes       Int      @default(5)
+  updatedById            String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([collegeId])
+}
+
+model UserPermissionOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collegeId String?
+  college   College? @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  module    String
+  canView   Boolean  @default(true)
+  canCreate Boolean  @default(false)
+  canUpdate Boolean  @default(false)
+  canDelete Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, module])
+  @@index([collegeId])
+  @@index([module])
+}
+
+model ActivityHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  collegeId String?
+  college   College? @relation(fields: [collegeId], references: [id], onDelete: SetNull)
+  action    String
+  summary   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([collegeId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model Course {

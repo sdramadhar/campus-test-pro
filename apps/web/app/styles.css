@@ -10,6 +10,18 @@
   --warn: #b45309;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101817;
+  --surface: #17211f;
+  --ink: #eef7f4;
+  --muted: #9db4ad;
+  --line: #2d3d39;
+  --accent: #7dd3c7;
+  --accent-strong: #8ee6d8;
+  --warn: #f59e0b;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -409,7 +421,7 @@ h1 {
 .form-field select,
 .form-field textarea,
 .bulk-box {
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
@@ -515,7 +527,7 @@ h1 {
 }
 
 .data-head {
-  background: #f8fafb;
+  background: color-mix(in srgb, var(--surface), var(--bg) 42%);
   color: var(--muted);
   font-size: 13px;
   font-weight: 900;
@@ -552,7 +564,7 @@ h1 {
 .row-actions button,
 .pagination button {
   align-items: center;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
@@ -909,5 +921,108 @@ h1 {
 
   .question-palette {
     grid-template-columns: repeat(6, minmax(36px, 1fr));
+  }
+}
+
+.admin-toolbar,
+.compact-toolbar {
+  grid-template-columns: 1fr auto;
+}
+
+.admin-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.admin-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.chart-list,
+.activity-list {
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+}
+
+.chart-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 150px 1fr 52px;
+}
+
+.chart-row div {
+  background: color-mix(in srgb, var(--accent), transparent 82%);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.chart-row i {
+  background: var(--accent-strong);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  max-width: 100%;
+}
+
+.activity-list div {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  padding-bottom: 12px;
+}
+
+.activity-list div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.activity-list span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-list-row {
+  grid-template-columns: repeat(5, minmax(150px, 1fr)) 90px;
+  min-width: 980px;
+}
+
+.admin-list-row:not(:has(button)) {
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+}
+
+.permission-row {
+  grid-template-columns: 1fr repeat(4, minmax(150px, 1fr));
+  min-width: 900px;
+}
+
+.check-field {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.check-field input {
+  min-height: auto;
+  width: auto;
+}
+
+:root[data-theme="dark"] .login-panel,
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .metrics article,
+:root[data-theme="dark"] .status,
+:root[data-theme="dark"] .search-box {
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .admin-grid,
+  .admin-toolbar,
+  .compact-toolbar {
+    grid-template-columns: 1fr;
   }
 }

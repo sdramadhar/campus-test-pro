@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { join } from "node:path";
+import { AdminPanelModule } from "./admin-panel/admin-panel.module";
 import { AcademicModule } from "./academic/academic.module";
 import { AuthModule } from "./auth/auth.module";
 import { CollegesModule } from "./colleges/colleges.module";
@@ -27,6 +28,7 @@ import { SystemModule } from "./system/system.module";
       isGlobal: true,
       validate: validateEnvironment,
     }),
+    AdminPanelModule,
     AcademicModule,
     AuthModule,
     CodeRunnerModule,

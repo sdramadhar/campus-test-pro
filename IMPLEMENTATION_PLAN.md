@@ -126,6 +126,18 @@
 - Add code-runner gateway contract that never executes untrusted code in API/worker and refuses mock mode in production.
 - Add Playwright E2E scaffolding and expand k6 load-test profiles for staging preparation.
 
+## Phase 10 - Complete Admin Panel
+
+- Add a protected `/admin` dashboard for `SUPER_ADMIN` and `COLLEGE_ADMIN` users with real tenant-scoped totals for students, faculty, colleges, departments, subjects, exams, questions, results, batches, semesters, and unread notifications.
+- Add chart-ready dashboard statistics for assessments, questions, and result publication state.
+- Reuse the existing database-backed academic CRUD manager under `/admin/students`, `/admin/faculty`, `/admin/departments`, `/admin/courses`, `/admin/semesters`, `/admin/subjects`, `/admin/batches`, and `/admin/assignments`.
+- Add admin APIs under `/api/v1/admin-panel` for dashboard statistics, college settings, profile settings, notifications, audit logs, activity history, and user permission visibility/overrides.
+- Add Prisma persistence for user theme preference, college settings, user permission overrides, and activity history.
+- Add seeded demo college settings, activity history, notifications, and a development permission override.
+- Add dark-mode support through CSS variables and the authenticated shell.
+- Preserve backend role guards and tenant isolation so College Admin users remain scoped to their own college.
+- Add responsive admin-panel pages with loading, success, empty, pagination, validation, and error states.
+
 ## Verification
 
 - Install dependencies.
@@ -135,3 +147,4 @@
 - Verify backend `/health`, `/ready`, and Swagger locally.
 - Verify frontend locally.
 - For Phase 9, also verify `/api/v1/system/version`, password reset, email development delivery, worker heartbeat, maintenance mode, and production Docker build validation where the local Docker runtime allows it.
+- For Phase 10, also verify `/admin`, `/admin/students`, `/admin/faculty`, `/admin/departments`, `/admin/subjects`, `/admin/semesters`, `/admin/batches`, `/admin/college-settings`, `/admin/permissions`, `/admin/profile`, `/admin/notifications`, `/admin/audit-logs`, `/admin/activity`, and the `/api/v1/admin-panel/*` endpoints.
