@@ -166,6 +166,22 @@
 - Expand AI usage/settings dashboard data with provider status, token totals, cost totals, failed jobs, provider failures, and generation statistics.
 - Add integration tests for runtime prompt settings, result versions, semantic duplicate metadata, document classification, OCR-required image imports, and admin AI usage/settings.
 
+## Phase 13 - AI Examination Engine
+
+- Add production-ready AI question-generation workflows for MCQ, true/false, fill-in-the-blank, descriptive, coding, and numerical question types.
+- Add generation options for subject, department, semester, topic, Bloom level, difficulty, marks, requested count, language, and output format.
+- Support AI batch generation for 10-500 questions with progress tracking, cancellation, retry, usage logging, and review-pending notifications.
+- Add AI exam-paper generation from subject, syllabus/blueprint metadata, chapter weightage, Bloom distribution, difficulty distribution, marks distribution, duration, and total marks.
+- Add random paper-set generation for Set A, Set B, Set C, and Set D while avoiding duplicate questions across generated sets.
+- Add model-answer generation for objective, descriptive, coding, and numerical questions, including coding starter-code/test metadata.
+- Add question analytics for AI confidence, duplicate score, estimated difficulty, solving time, Bloom classification, and topic prediction.
+- Add document-import validation reports with syllabus mapping, chapter mapping, duplicate preview, validation issues, warnings, and import history.
+- Add prompt rollback support for versioned AI prompt templates.
+- Add Phase 13 frontend routes for AI batch generation, AI paper generation, and random paper sets.
+- Add notifications for AI generation completion/failure, import completion, and pending review.
+- Seed a completed demo AI batch generation and a generated AI paper set for Demo College.
+- Add integration tests for batch generation, retry/progress, paper generation, random sets, answer generation, analytics, validation report, and prompt rollback.
+
 ## Verification
 
 - Install dependencies.
@@ -178,3 +194,4 @@
 - For Phase 10, also verify `/admin`, `/admin/students`, `/admin/faculty`, `/admin/departments`, `/admin/subjects`, `/admin/semesters`, `/admin/batches`, `/admin/college-settings`, `/admin/permissions`, `/admin/profile`, `/admin/notifications`, `/admin/audit-logs`, `/admin/activity`, and the `/api/v1/admin-panel/*` endpoints.
 - For Phase 11, also verify `/questions/ai-generate`, `/questions/ai-jobs`, `/questions/import-document`, `/admin/ai/prompts`, `/admin/ai/usage`, `/academic/syllabi`, Swagger, and the mock-provider review workflow.
 - For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.
+- For Phase 13, also verify `/questions/ai-batch`, `/assessments/ai-paper`, `/assessments/random-sets`, batch progress/cancel/retry APIs, generated paper-set APIs, model-answer APIs, prompt rollback, validation reports, question analytics, notifications, Swagger, and worker/API readiness.

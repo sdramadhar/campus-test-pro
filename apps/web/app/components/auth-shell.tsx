@@ -179,6 +179,12 @@ const navItems: Array<{
   },
   {
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/questions/ai-batch",
+    label: "AI Batch",
+    icon: "activity",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
     href: "/questions/import-document",
     label: "Document Import",
     icon: "audit",
@@ -211,6 +217,18 @@ const navItems: Array<{
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
     href: "/assessments",
     label: "Assessments",
+    icon: "assessments",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/assessments/ai-paper",
+    label: "AI Paper",
+    icon: "assessments",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/assessments/random-sets",
+    label: "Random Sets",
     icon: "assessments",
   },
   {

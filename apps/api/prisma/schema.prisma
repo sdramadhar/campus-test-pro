@@ -295,6 +295,10 @@ enum NotificationType {
   RESULT_PUBLISHED
   REVIEW_COMPLETED
   ACCOUNT_STATUS_CHANGE
+  AI_GENERATION_COMPLETED
+  AI_GENERATION_FAILED
+  DOCUMENT_IMPORT_COMPLETED
+  AI_REVIEW_PENDING
 }
 
 enum NotificationStatus {
@@ -324,35 +328,35 @@ enum AttemptSessionPolicy {
 }
 
 model User {
-  id                       String                   @id @default(cuid())
-  email                    String                   @unique
-  studentId                String?                  @unique
+  id                       String                      @id @default(cuid())
+  email                    String                      @unique
+  studentId                String?                     @unique
   phone                    String?
   name                     String
   role                     Role
   passwordHash             String?
-  mustChangePassword       Boolean                  @default(false)
-  isActive                 Boolean                  @default(true)
-  themePreference          ThemePreference          @default(SYSTEM)
+  mustChangePassword       Boolean                     @default(false)
+  isActive                 Boolean                     @default(true)
+  themePreference          ThemePreference             @default(SYSTEM)
   collegeId                String?
-  college                  College?                 @relation("CollegeUsers", fields: [collegeId], references: [id])
-  collegesCreated          College[]                @relation("CollegeCreatedBy")
-  collegesUpdated          College[]                @relation("CollegeUpdatedBy")
-  coursesLed               Course[]                 @relation("CourseInstructor")
+  college                  College?                    @relation("CollegeUsers", fields: [collegeId], references: [id])
+  collegesCreated          College[]                   @relation("CollegeCreatedBy")
+  collegesUpdated          College[]                   @relation("CollegeUpdatedBy")
+  coursesLed               Course[]                    @relation("CourseInstructor")
   facultyProfile           FacultyProfile?
   studentProfile           StudentProfile?
   subjectAssignments       SubjectAssignment[]
-  questionsCreated         Question[]               @relation("QuestionCreatedBy")
-  questionsUpdated         Question[]               @relation("QuestionUpdatedBy")
-  assessmentsCreated       Assessment[]             @relation("AssessmentCreatedBy")
-  assessmentsUpdated       Assessment[]             @relation("AssessmentUpdatedBy")
+  questionsCreated         Question[]                  @relation("QuestionCreatedBy")
+  questionsUpdated         Question[]                  @relation("QuestionUpdatedBy")
+  assessmentsCreated       Assessment[]                @relation("AssessmentCreatedBy")
+  assessmentsUpdated       Assessment[]                @relation("AssessmentUpdatedBy")
   enrollments              Enrollment[]
   submissions              Submission[]
   testAttempts             TestAttempt[]
-  manualReviewsAssigned    ManualReviewTask[]       @relation("ManualReviewAssignedTo")
+  manualReviewsAssigned    ManualReviewTask[]          @relation("ManualReviewAssignedTo")
   notifications            Notification[]
-  resultModerations        ResultModeration[]       @relation("ResultModeratedBy")
-  securityReviews          AttemptSecurityReview[]  @relation("SecurityReviewedBy")
+  resultModerations        ResultModeration[]          @relation("ResultModeratedBy")
+  securityReviews          AttemptSecurityReview[]     @relation("SecurityReviewedBy")
   passwordResetTokens      PasswordResetToken[]
   emailDeliveries          EmailDelivery[]
   storageObjects           StorageObject[]
@@ -361,16 +365,16 @@ model User {
   auditLogs                AuditLog[]
   activityHistory          ActivityHistory[]
   permissionOverrides      UserPermissionOverride[]
-  aiGenerationJobs         AiGenerationJob[]        @relation("AiGenerationRequestedBy")
-  aiReviewDecisions        AiReviewDecision[]       @relation("AiReviewDecidedBy")
+  aiGenerationJobs         AiGenerationJob[]           @relation("AiGenerationRequestedBy")
+  aiReviewDecisions        AiReviewDecision[]          @relation("AiReviewDecidedBy")
   aiResultVersionsEdited   AiGenerationResultVersion[] @relation("AiResultVersionEditedBy")
-  aiPromptTemplatesCreated AiPromptTemplate[]       @relation("AiPromptCreatedBy")
-  aiPromptTemplatesUpdated AiPromptTemplate[]       @relation("AiPromptUpdatedBy")
-  documentImportJobs       DocumentImportJob[]      @relation("DocumentImportRequestedBy")
-  syllabiCreated           Syllabus[]               @relation("SyllabusCreatedBy")
-  syllabiUpdated           Syllabus[]               @relation("SyllabusUpdatedBy")
-  createdAt                DateTime                 @default(now())
-  updatedAt                DateTime                 @updatedAt
+  aiPromptTemplatesCreated AiPromptTemplate[]          @relation("AiPromptCreatedBy")
+  aiPromptTemplatesUpdated AiPromptTemplate[]          @relation("AiPromptUpdatedBy")
+  documentImportJobs       DocumentImportJob[]         @relation("DocumentImportRequestedBy")
+  syllabiCreated           Syllabus[]                  @relation("SyllabusCreatedBy")
+  syllabiUpdated           Syllabus[]                  @relation("SyllabusUpdatedBy")
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
 
   @@index([collegeId])
   @@index([role])
@@ -1587,6 +1591,55 @@ model AiGenerationJob {
   @@index([createdAt])
 }
 
+model AiBatchGeneration {
+  id             String                @id @default(cuid())
+  collegeId      String
+  requestedById  String
+  subjectId      String?
+  departmentId   String?
+  semesterId     String?
+  topic          String
+  requestedCount Int
+  completedCount Int                   @default(0)
+  failedCount    Int                   @default(0)
+  cancelledCount Int                   @default(0)
+  status         AiGenerationJobStatus @default(QUEUED)
+  options        Json?
+  jobIds         String[]
+  errorSummary   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([collegeId])
+  @@index([requestedById])
+  @@index([subjectId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AiGeneratedPaperSet {
+  id              String   @id @default(cuid())
+  collegeId       String
+  assessmentId    String?
+  requestedById   String
+  subjectId       String?
+  setCode         String
+  title           String
+  durationMinutes Int?
+  totalMarks      Float    @default(0)
+  questionIds     String[]
+  blueprint       Json?
+  analytics       Json?
+  createdAt       DateTime @default(now())
+
+  @@index([collegeId])
+  @@index([assessmentId])
+  @@index([requestedById])
+  @@index([subjectId])
+}
+
 model AiGenerationRequest {
   id                  String          @id @default(cuid())
   jobId               String          @unique
@@ -1613,12 +1666,12 @@ model AiGenerationRequest {
 }
 
 model AiGenerationResult {
-  id                  String              @id @default(cuid())
+  id                  String                      @id @default(cuid())
   jobId               String
-  job                 AiGenerationJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job                 AiGenerationJob             @relation(fields: [jobId], references: [id], onDelete: Cascade)
   questionId          String?
-  question            Question?           @relation(fields: [questionId], references: [id], onDelete: SetNull)
-  reviewStatus        AiReviewStatus      @default(PENDING)
+  question            Question?                   @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  reviewStatus        AiReviewStatus              @default(PENDING)
   questionType        QuestionType
   questionText        String
   options             Json?
@@ -1631,18 +1684,18 @@ model AiGenerationResult {
   approvedBloomLevel  BloomLevel?
   suggestedTopic      String?
   tags                String[]
-  marks               Float               @default(1)
-  negativeMarks       Float               @default(0)
+  marks               Float                       @default(1)
+  negativeMarks       Float                       @default(0)
   warnings            String[]
   confidence          Float?
-  duplicateCandidate  Boolean             @default(false)
+  duplicateCandidate  Boolean                     @default(false)
   similarityScore     Float?
   duplicateReason     String?
   reviewerChanges     Json?
   rejectionReason     String?
   reviewedAt          DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
   decisions           AiReviewDecision[]
   versions            AiGenerationResultVersion[]
 

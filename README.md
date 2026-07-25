@@ -220,6 +220,11 @@ Phase 10 seed data adds Demo College admin settings, admin-panel notifications, 
 Phase 11/12 AI workflow routes:
 
 - `POST /api/v1/ai/questions/generate`
+- `POST /api/v1/ai/questions/batch-generate`
+- `GET /api/v1/ai/batch-generations/:batchId`
+- `POST /api/v1/ai/batch-generations/:batchId/cancel`
+- `POST /api/v1/ai/batch-generations/:batchId/retry`
+- `POST /api/v1/ai/answers/generate`
 - `GET /api/v1/ai/jobs`
 - `GET /api/v1/ai/jobs/:jobId`
 - `POST /api/v1/ai/jobs/:jobId/cancel`
@@ -229,11 +234,17 @@ Phase 11/12 AI workflow routes:
 - `POST /api/v1/ai/jobs/:jobId/save-approved`
 - `GET /api/v1/ai/jobs/:jobId/results/:resultId/versions`
 - `GET|POST|PATCH|DELETE /api/v1/ai/prompts`
+- `POST /api/v1/ai/prompts/:id/rollback`
 - `GET /api/v1/ai/usage`
 - `GET|PATCH /api/v1/ai/settings`
+- `POST /api/v1/ai/exam-engine/paper`
+- `POST /api/v1/ai/exam-engine/random-sets`
+- `GET /api/v1/ai/exam-engine/papers`
+- `GET /api/v1/ai/exam-engine/questions/:id/analytics`
 - `POST /api/v1/question-imports/documents`
 - `GET /api/v1/question-imports/jobs`
 - `GET|POST|DELETE /api/v1/question-imports/jobs/:jobId`
+- `GET /api/v1/question-imports/jobs/:jobId/validation-report`
 - `POST /api/v1/questions/check-duplicate`
 - `GET /api/v1/questions/:id/duplicates`
 - `PATCH /api/v1/question-duplicates/:id/review`
@@ -243,6 +254,7 @@ Phase 11/12 AI workflow routes:
 Phase 11/12 frontend routes:
 
 - `/questions/ai-generate`
+- `/questions/ai-batch`
 - `/questions/ai-jobs`
 - `/questions/ai-jobs/[jobId]`
 - `/questions/ai-review/[jobId]`
@@ -254,8 +266,12 @@ Phase 11/12 frontend routes:
 - `/admin/ai/settings`
 - `/academic/syllabi`
 - `/academic/syllabi/[id]/coverage`
+- `/assessments/ai-paper`
+- `/assessments/random-sets`
 
 AI defaults are development-only. `AI_PROVIDER=mock` creates deterministic sample questions for local testing and is rejected in production. Real provider adapters are available for `openai`, `gemini`, `anthropic`, `azure-openai`, and `ollama`; keys and endpoints are read only from server environment variables. AI output and document-extracted candidates must be reviewed by a human and are saved into the Question Bank as `DRAFT`, never as active questions.
+
+Phase 13 adds an AI examination engine on top of the Phase 11/12 workflow foundation. Faculty and administrators can batch-generate 10-500 review-first questions, track progress, cancel or retry jobs, generate model answers, generate draft exam papers from syllabus/blueprint distributions, create duplicate-free random sets A-D, inspect AI question analytics, roll back prompt versions, and view document-import validation reports. Seed data includes a completed demo AI batch generation and generated paper set for Demo College.
 
 Phase 12 AI/OCR environment variables:
 

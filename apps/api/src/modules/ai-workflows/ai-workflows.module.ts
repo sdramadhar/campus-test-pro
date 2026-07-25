@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import {
+  AiExamEngineController,
   AiPromptsController,
   AiQuestionsController,
   AiUsageController,
@@ -23,6 +24,7 @@ import { AiProviderFactory } from "./providers/ai-provider.factory";
     QuestionDuplicatesController,
     SyllabiController,
     AssessmentBlueprintsController,
+    AiExamEngineController,
   ],
   providers: [AiWorkflowsService, AiProviderFactory],
 })

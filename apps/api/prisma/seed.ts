@@ -1346,6 +1346,12 @@ async function main(): Promise<void> {
   await prisma.assessmentBlueprint.deleteMany({
     where: { assessmentId: draftAssessment.id, unit: "Unit 1" },
   });
+  await prisma.aiGeneratedPaperSet.deleteMany({
+    where: { id: "seed-ai-paper-set-phase13" },
+  });
+  await prisma.aiBatchGeneration.deleteMany({
+    where: { id: "seed-ai-batch-phase13" },
+  });
   await prisma.syllabus.deleteMany({
     where: {
       collegeId: demoCollege.id,
@@ -1606,6 +1612,61 @@ async function main(): Promise<void> {
       marks: 4,
       autoRecommend: true,
       generateMissing: false,
+    },
+  });
+
+  await prisma.aiBatchGeneration.create({
+    data: {
+      id: "seed-ai-batch-phase13",
+      collegeId: demoCollege.id,
+      requestedById: faculty.id,
+      subjectId: subject.id,
+      departmentId: department.id,
+      semesterId: firstSemester.id,
+      topic: "Queues",
+      requestedCount: 10,
+      completedCount: 10,
+      failedCount: 0,
+      cancelledCount: 0,
+      status: AiGenerationJobStatus.COMPLETED,
+      options: {
+        questionType: QuestionType.TRUE_FALSE,
+        difficulty: QuestionDifficulty.MEDIUM,
+        bloomLevel: BloomLevel.UNDERSTAND,
+        marks: 1,
+        language: "English",
+        outputFormat: "review-json",
+      },
+      jobIds: ["seed-ai-job-phase11"],
+      startedAt: new Date("2026-07-25T08:00:00.000Z"),
+      completedAt: new Date("2026-07-25T08:01:00.000Z"),
+    },
+  });
+
+  await prisma.aiGeneratedPaperSet.create({
+    data: {
+      id: "seed-ai-paper-set-phase13",
+      collegeId: demoCollege.id,
+      assessmentId: draftAssessment.id,
+      requestedById: faculty.id,
+      subjectId: subject.id,
+      setCode: "A",
+      title: "Seeded Phase 13 AI Paper",
+      durationMinutes: 60,
+      totalMarks: 10,
+      questionIds: createdQuestions.slice(0, 4).map((question) => question.id),
+      blueprint: {
+        syllabusId: "seed-syllabus-phase11",
+        chapterWeightage: { "Unit 1": 100 },
+        bloomDistribution: { UNDERSTAND: 60, REMEMBER: 40 },
+        difficultyDistribution: { EASY: 50, MEDIUM: 50 },
+      },
+      analytics: {
+        phase: 13,
+        generatedBy: "seed",
+        duplicateFree: true,
+        humanReviewRequired: false,
+      },
     },
   });
 

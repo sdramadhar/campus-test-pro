@@ -2013,6 +2013,151 @@ async function runAiWorkflowTests(
     "none",
     "OCR defaults to disabled unless configured",
   );
+
+  const batch = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/ai/questions/batch-generate",
+    facultySession.cookie,
+    "POST",
+    {
+      subjectId: subject.id,
+      topic: "Phase 13 batch queues",
+      questionType: "TRUE_FALSE",
+      requestedCount: 10,
+      marks: 1,
+      language: "English",
+      outputStyle: "review-json",
+    },
+    201,
+    "AI batch generation queues background jobs",
+  );
+  const batchId = String(batch.id);
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/ai/batch-generations/${batchId}`, {
+      headers: { Cookie: facultySession.cookie },
+    }),
+    200,
+    "AI batch progress endpoint works",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/ai/batch-generations/${batchId}/retry`, {
+      method: "POST",
+      headers: { Cookie: facultySession.cookie },
+    }),
+    201,
+    "AI batch retry endpoint works",
+  );
+
+  const paper = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/ai/exam-engine/paper",
+    facultySession.cookie,
+    "POST",
+    {
+      subjectId: subject.id,
+      title: "Phase 13 AI Paper",
+      durationMinutes: 45,
+      totalMarks: 2,
+      blueprint: { balanced: true },
+      chapterWeightage: { "Unit 1": 100 },
+      difficultyDistribution: { MEDIUM: 100 },
+      bloomDistribution: { UNDERSTAND: 100 },
+      marksDistribution: { "1": 100 },
+    },
+    201,
+    "AI exam paper generator creates draft assessment",
+  );
+  const paperAssessment = paper.assessment as Record<string, unknown>;
+  assertEqual(
+    String(paperAssessment.status),
+    "DRAFT",
+    "AI generated paper starts as draft assessment",
+  );
+
+  const randomSets = await jsonRequest<Array<Record<string, unknown>>>(
+    baseUrl,
+    "/api/v1/ai/exam-engine/random-sets",
+    facultySession.cookie,
+    "POST",
+    {
+      subjectId: subject.id,
+      title: "Phase 13 Random",
+      durationMinutes: 30,
+      totalMarks: 1,
+      setCodes: ["A", "B", "C", "D"],
+      blueprint: { noDuplicates: true },
+    },
+    201,
+    "random paper generator creates sets",
+  );
+  assertEqual(randomSets.length, 4, "random paper generator creates four sets");
+
+  const answer = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/ai/answers/generate",
+    facultySession.cookie,
+    "POST",
+    { questionId: String(saved[0]?.id), language: "English" },
+    201,
+    "AI answer generator works",
+  );
+  assert(Boolean(answer.answer), "AI answer generator returns model answer");
+
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/ai/exam-engine/questions/${String(saved[0]?.id)}/analytics`, {
+      headers: { Cookie: facultySession.cookie },
+    }),
+    200,
+    "question analytics endpoint works",
+  );
+
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/question-imports/jobs/${String(importJob.id)}/validation-report`, {
+      headers: { Cookie: facultySession.cookie },
+    }),
+    200,
+    "document validation report endpoint works",
+  );
+
+  const prompt = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/ai/prompts",
+    adminSession.cookie,
+    "POST",
+    {
+      name: "Phase 13 rollback prompt",
+      featureType: "QUESTION_GENERATION",
+      systemInstruction: "Initial system prompt",
+      userPromptTemplate: "Initial {{topic}} prompt",
+      variables: ["topic"],
+      providerCompatibility: ["mock"],
+      temperature: 0.2,
+      maxTokens: 500,
+      active: true,
+    },
+    201,
+    "admin creates rollback prompt",
+  );
+  await expectStatus(
+    patchJsonWithCookie(
+      baseUrl,
+      `/api/v1/ai/prompts/${String(prompt.id)}`,
+      adminSession.cookie,
+      { systemInstruction: "Updated system prompt" },
+    ),
+    200,
+    "admin versions prompt",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      `/api/v1/ai/prompts/${String(prompt.id)}/rollback`,
+      adminSession.cookie,
+      { version: Number(prompt.version) },
+    ),
+    201,
+    "admin rolls back prompt version",
+  );
 }
 
 async function pollJob(

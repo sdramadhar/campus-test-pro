@@ -67,7 +67,7 @@ export class GenerateQuestionsDto {
   @Transform(({ value }) => Number(value))
   @IsInt()
   @Min(1)
-  @Max(25)
+  @Max(500)
   requestedCount!: number;
 
   @ApiPropertyOptional({ enum: QuestionDifficulty })
@@ -144,6 +144,13 @@ export class GenerateQuestionsDto {
   @IsOptional()
   @IsString()
   model?: string;
+}
+
+export class BatchGenerateQuestionsDto extends GenerateQuestionsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
 }
 
 export class AiJobListQueryDto {
@@ -276,6 +283,86 @@ export class PromptTemplateDto {
   @IsOptional()
   @IsString()
   model?: string;
+}
+
+export class RollbackPromptDto {
+  @ApiProperty()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  version!: number;
+}
+
+export class GenerateAnswerDto {
+  @ApiProperty()
+  @IsString()
+  questionId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  language?: string;
+}
+
+export class ExamPaperGeneratorDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiProperty()
+  @IsString()
+  subjectId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  syllabusId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiProperty()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  durationMinutes!: number;
+
+  @ApiProperty()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(1)
+  totalMarks!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  blueprint?: unknown;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  chapterWeightage?: unknown;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  difficultyDistribution?: unknown;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  bloomDistribution?: unknown;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  marksDistribution?: unknown;
+}
+
+export class RandomPaperSetsDto extends ExamPaperGeneratorDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  setCodes?: string[];
 }
 
 export class ImportDocumentDto {

@@ -20,13 +20,18 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { AiWorkflowsService } from "./ai-workflows.service";
 import {
   AiJobListQueryDto,
+  BatchGenerateQuestionsDto,
   BlueprintDto,
   DuplicateCheckDto,
   DuplicateReviewDto,
+  ExamPaperGeneratorDto,
+  GenerateAnswerDto,
   GenerateQuestionsDto,
   ImportDocumentDto,
   PromptTemplateDto,
+  RandomPaperSetsDto,
   ReviewGeneratedQuestionDto,
+  RollbackPromptDto,
   SyllabusDto,
   UpdateGeneratedQuestionDto,
 } from "./dto/ai-workflows.dto";
@@ -58,6 +63,44 @@ export class AiQuestionsController extends AiBaseController {
     @Body() dto: GenerateQuestionsDto,
   ) {
     return this.service.generateQuestions(user, dto);
+  }
+
+  @Post("questions/batch-generate")
+  @ApiOperation({ summary: "Create a background AI batch generation request." })
+  batchGenerate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BatchGenerateQuestionsDto,
+  ) {
+    return this.service.batchGenerateQuestions(user, dto);
+  }
+
+  @Get("batch-generations/:batchId")
+  batch(@CurrentUser() user: AuthenticatedUser, @Param("batchId") batchId: string) {
+    return this.service.getBatchGeneration(user, batchId);
+  }
+
+  @Post("batch-generations/:batchId/cancel")
+  cancelBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("batchId") batchId: string,
+  ) {
+    return this.service.cancelBatchGeneration(user, batchId);
+  }
+
+  @Post("batch-generations/:batchId/retry")
+  retryBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("batchId") batchId: string,
+  ) {
+    return this.service.retryBatchGeneration(user, batchId);
+  }
+
+  @Post("answers/generate")
+  generateAnswer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: GenerateAnswerDto,
+  ) {
+    return this.service.generateModelAnswer(user, dto);
   }
 
   @Get("jobs")
@@ -168,6 +211,16 @@ export class AiPromptsController extends AiBaseController {
   remove(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.service.deletePromptTemplate(user, id);
   }
+
+  @Post(":id/rollback")
+  @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN)
+  rollback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Body() dto: RollbackPromptDto,
+  ) {
+    return this.service.rollbackPromptTemplate(user, id, dto);
+  }
 }
 
 @ApiTags("ai-usage-settings")
@@ -224,6 +277,14 @@ export class QuestionImportsController extends AiBaseController {
     return this.service.getDocumentJob(user, jobId);
   }
 
+  @Get("jobs/:jobId/validation-report")
+  validationReport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("jobId") jobId: string,
+  ) {
+    return this.service.documentValidationReport(user, jobId);
+  }
+
   @Post("jobs/:jobId/process")
   process(@CurrentUser() user: AuthenticatedUser, @Param("jobId") jobId: string) {
     return this.service.processDocumentJob(user, jobId);
@@ -237,6 +298,43 @@ export class QuestionImportsController extends AiBaseController {
   @Delete("jobs/:jobId")
   remove(@CurrentUser() user: AuthenticatedUser, @Param("jobId") jobId: string) {
     return this.service.deleteDocumentJob(user, jobId);
+  }
+}
+
+@ApiTags("ai-exam-engine")
+@Controller("api/v1/ai/exam-engine")
+export class AiExamEngineController extends AiBaseController {
+  constructor(@Inject(AiWorkflowsService) service: AiWorkflowsService) {
+    super(service);
+  }
+
+  @Post("paper")
+  @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
+  generatePaper(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ExamPaperGeneratorDto,
+  ) {
+    return this.service.generateExamPaper(user, dto);
+  }
+
+  @Post("random-sets")
+  @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
+  randomSets(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RandomPaperSetsDto,
+  ) {
+    return this.service.generateRandomPaperSets(user, dto);
+  }
+
+  @Get("papers")
+  @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
+  papers(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.listGeneratedPaperSets(user);
+  }
+
+  @Get("questions/:id/analytics")
+  analytics(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.service.questionAnalytics(user, id);
   }
 }
 

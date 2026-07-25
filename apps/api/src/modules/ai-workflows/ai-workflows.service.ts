@@ -16,9 +16,12 @@ import {
   AiDecisionType,
   AiGenerationJobStatus,
   AiReviewStatus,
+  AssessmentStatus,
   AuditEvent,
   BloomLevel,
   DocumentImportStatus,
+  NotificationStatus,
+  NotificationType,
   Prisma,
   QuestionDifficulty,
   QuestionStatus,
@@ -30,13 +33,18 @@ import { env } from "../config/environment";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AiJobListQueryDto,
+  BatchGenerateQuestionsDto,
   BlueprintDto,
   DuplicateCheckDto,
   DuplicateReviewDto,
+  ExamPaperGeneratorDto,
+  GenerateAnswerDto,
   GenerateQuestionsDto,
   ImportDocumentDto,
   PromptTemplateDto,
+  RandomPaperSetsDto,
   ReviewGeneratedQuestionDto,
+  RollbackPromptDto,
   SyllabusDto,
   UpdateGeneratedQuestionDto,
 } from "./dto/ai-workflows.dto";
@@ -170,6 +178,129 @@ export class AiWorkflowsService {
 
     void this.processGenerationJob(user, job.id);
     return { success: true, data: await this.getJobData(user, job.id) };
+  }
+
+  async batchGenerateQuestions(
+    user: AuthenticatedUser,
+    dto: BatchGenerateQuestionsDto,
+  ) {
+    this.ensureAiUser(user);
+    if (dto.requestedCount < 10 || dto.requestedCount > 500) {
+      throw new BadRequestException("Batch generation requires 10 to 500 questions.");
+    }
+    const collegeId = this.scopeCollege(user, dto.collegeId);
+    const chunkSize = Math.min(env().AI_MAX_QUESTIONS_PER_REQUEST, 25);
+    const batch = await this.prisma.aiBatchGeneration.create({
+      data: {
+        collegeId,
+        requestedById: user.id,
+        subjectId: dto.subjectId,
+        departmentId: dto.departmentId,
+        semesterId: dto.semesterId,
+        topic: dto.topic,
+        requestedCount: dto.requestedCount,
+        status: AiGenerationJobStatus.PROCESSING,
+        startedAt: new Date(),
+        options: this.jsonValue({
+          questionType: dto.questionType,
+          difficulty: dto.difficulty,
+          bloomLevel: dto.bloomLevel,
+          marks: dto.marks,
+          language: dto.language,
+          outputStyle: dto.outputStyle,
+        }),
+        jobIds: [],
+      },
+    });
+    const jobIds: string[] = [];
+    let remaining = dto.requestedCount;
+    while (remaining > 0) {
+      const requestedCount = Math.min(chunkSize, remaining);
+      const response = await this.generateQuestions(user, {
+        collegeId,
+        subjectId: dto.subjectId,
+        courseId: dto.courseId,
+        semesterId: dto.semesterId,
+        unit: dto.unit,
+        topic: dto.topic,
+        syllabusText: dto.syllabusText,
+        sourceNotes: dto.sourceNotes,
+        questionType: dto.questionType,
+        requestedCount,
+        difficulty: dto.difficulty,
+        bloomLevel: dto.bloomLevel,
+        marks: dto.marks,
+        negativeMarks: dto.negativeMarks,
+        language: dto.language,
+        explanationRequired: dto.explanationRequired,
+        answerKeyRequired: dto.answerKeyRequired,
+        outputStyle: dto.outputStyle,
+        avoidDuplicate: dto.avoidDuplicate,
+        promptTemplateId: dto.promptTemplateId,
+        temperature: dto.temperature,
+        maxTokens: dto.maxTokens,
+        model: dto.model,
+      });
+      jobIds.push(response.data.id);
+      remaining -= requestedCount;
+    }
+    const updated = await this.prisma.aiBatchGeneration.update({
+      where: { id: batch.id },
+      data: { jobIds },
+    });
+    await this.notify(
+      user,
+      collegeId,
+      NotificationType.AI_REVIEW_PENDING,
+      "AI batch generation queued",
+      `${String(dto.requestedCount)} questions are being generated for review.`,
+      { batchId: batch.id, jobIds },
+    );
+    return { success: true, data: await this.batchProgress(updated.id, user) };
+  }
+
+  async getBatchGeneration(user: AuthenticatedUser, batchId: string) {
+    this.ensureAiUser(user);
+    return { success: true, data: await this.batchProgress(batchId, user) };
+  }
+
+  async cancelBatchGeneration(user: AuthenticatedUser, batchId: string) {
+    this.ensureAiUser(user);
+    const batch = await this.getScopedBatch(user, batchId);
+    await this.prisma.aiGenerationJob.updateMany({
+      where: {
+        id: { in: batch.jobIds },
+        status: {
+          in: [AiGenerationJobStatus.QUEUED, AiGenerationJobStatus.PROCESSING],
+        },
+      },
+      data: { status: AiGenerationJobStatus.CANCELLED },
+    });
+    await this.prisma.aiBatchGeneration.update({
+      where: { id: batchId },
+      data: { status: AiGenerationJobStatus.CANCELLED },
+    });
+    return { success: true, data: await this.batchProgress(batchId, user) };
+  }
+
+  async retryBatchGeneration(user: AuthenticatedUser, batchId: string) {
+    this.ensureAiUser(user);
+    const batch = await this.getScopedBatch(user, batchId);
+    const failed = await this.prisma.aiGenerationJob.findMany({
+      where: { id: { in: batch.jobIds }, status: AiGenerationJobStatus.FAILED },
+    });
+    await this.prisma.aiGenerationJob.updateMany({
+      where: { id: { in: failed.map((job) => job.id) } },
+      data: { status: AiGenerationJobStatus.QUEUED, errorSummary: null },
+    });
+    for (const job of failed) {
+      void this.processGenerationJob(user, job.id);
+    }
+    await this.prisma.aiBatchGeneration.update({
+      where: { id: batchId },
+      data: { status: AiGenerationJobStatus.PROCESSING },
+    });
+    return { success: true, data: await this.batchProgress(batchId, user) };
   }
 
   async listJobs(user: AuthenticatedUser, query: AiJobListQueryDto) {
@@ -476,7 +607,20 @@ export class AiWorkflowsService {
         updatedById: user.id,
         versionHistory: [
           ...this.arrayFromJson(existing.versionHistory),
-          { version: existing.version, updatedAt: existing.updatedAt },
+          {
+            version: existing.version,
+            updatedAt: existing.updatedAt,
+            beforeState: {
+              systemInstruction: existing.systemInstruction,
+              userPromptTemplate: existing.userPromptTemplate,
+              variables: existing.variables,
+              providerCompatibility: existing.providerCompatibility,
+              temperature: existing.temperature,
+              maxTokens: existing.maxTokens,
+              model: existing.model,
+              active: existing.active,
+            },
+          },
         ] as Prisma.InputJsonValue,
         version: { increment: 1 },
       },
@@ -496,6 +640,61 @@ export class AiWorkflowsService {
       data: { active: false, updatedById: user.id },
     });
     return { success: true };
+  }
+
+  async rollbackPromptTemplate(
+    user: AuthenticatedUser,
+    id: string,
+    dto: RollbackPromptDto,
+  ) {
+    this.ensureAdmin(user);
+    const existing = await this.prisma.aiPromptTemplate.findFirst({
+      where: this.promptWhere(user, id),
+    });
+    if (!existing) throw new NotFoundException("Prompt template not found.");
+    const version = this.arrayFromJson(existing.versionHistory).find(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        Number((item as Record<string, unknown>).version) === dto.version,
+    ) as Record<string, unknown> | undefined;
+    const beforeState =
+      version && typeof version.beforeState === "object"
+        ? (version.beforeState as Record<string, unknown>)
+        : null;
+    if (!beforeState) {
+      throw new NotFoundException("Prompt version snapshot not found.");
+    }
+    const systemInstruction =
+      typeof beforeState.systemInstruction === "string"
+        ? beforeState.systemInstruction
+        : existing.systemInstruction;
+    const userPromptTemplate =
+      typeof beforeState.userPromptTemplate === "string"
+        ? beforeState.userPromptTemplate
+        : existing.userPromptTemplate;
+    const updated = await this.prisma.aiPromptTemplate.update({
+      where: { id },
+      data: {
+        systemInstruction,
+        userPromptTemplate,
+        variables: Array.isArray(beforeState.variables)
+          ? beforeState.variables.map(String)
+          : existing.variables,
+        providerCompatibility: Array.isArray(beforeState.providerCompatibility)
+          ? beforeState.providerCompatibility.map(String)
+          : existing.providerCompatibility,
+        temperature: Number(beforeState.temperature ?? existing.temperature),
+        maxTokens: Number(beforeState.maxTokens ?? existing.maxTokens),
+        model:
+          typeof beforeState.model === "string" ? beforeState.model : existing.model,
+        active: Boolean(beforeState.active ?? existing.active),
+        updatedById: user.id,
+        version: { increment: 1 },
+      },
+    });
+    await this.audit(user, AuditEvent.AI_PROMPT_TEMPLATE_UPDATE, updated.collegeId);
+    return { success: true, data: updated };
   }
 
   async usage(user: AuthenticatedUser) {
@@ -609,6 +808,16 @@ export class AiWorkflowsService {
       include: this.documentJobInclude(),
     });
     await this.audit(user, AuditEvent.DOCUMENT_IMPORT_CREATE, collegeId);
+    await this.notify(
+      user,
+      collegeId,
+      extraction.ocrRequired
+        ? NotificationType.AI_REVIEW_PENDING
+        : NotificationType.DOCUMENT_IMPORT_COMPLETED,
+      extraction.ocrRequired ? "Document import needs OCR" : "Document import completed",
+      `${dto.fileName} produced ${String(extraction.candidates.length)} review candidate(s).`,
+      { jobId: job.id, sourceKind: extraction.sourceKind },
+    );
     return { success: true, data: job };
   }
 
@@ -658,6 +867,14 @@ export class AiWorkflowsService {
       data: { status: DocumentImportStatus.COMPLETED },
     });
     await this.audit(user, AuditEvent.DOCUMENT_IMPORT_PROCESS, job.collegeId);
+    await this.notify(
+      user,
+      job.collegeId,
+      NotificationType.DOCUMENT_IMPORT_COMPLETED,
+      "Document import processed",
+      `${job.fileName} is ready for question review.`,
+      { jobId },
+    );
     return this.getDocumentJob(user, jobId);
   }
 
@@ -931,6 +1148,433 @@ export class AiWorkflowsService {
     return { success: true, data: blueprint };
   }
 
+  async generateExamPaper(user: AuthenticatedUser, dto: ExamPaperGeneratorDto) {
+    this.ensureAiUser(user);
+    const collegeId = this.scopeCollege(user, dto.collegeId);
+    const subject = await this.prisma.subject.findFirst({
+      where: { id: dto.subjectId, collegeId },
+    });
+    if (!subject) throw new NotFoundException("Subject not found.");
+    const questions = await this.selectPaperQuestions(
+      collegeId,
+      dto.subjectId,
+      dto.totalMarks,
+      dto,
+    );
+    if (questions.length === 0) {
+      throw new BadRequestException("No eligible reviewed questions found.");
+    }
+    const assessment = await this.prisma.assessment.create({
+      data: {
+        collegeId,
+        subjectId: dto.subjectId,
+        title: dto.title ?? `AI Paper - ${subject.subjectName}`,
+        description: "Generated by CampusTest Pro AI examination engine.",
+        instructions:
+          "Review this generated draft paper before scheduling or publishing.",
+        durationMinutes: dto.durationMinutes,
+        durationMin: dto.durationMinutes,
+        totalMarks: questions.reduce((sum, question) => sum + question.defaultMarks, 0),
+        status: AssessmentStatus.DRAFT,
+        createdById: user.id,
+        updatedById: user.id,
+        sections: {
+          create: {
+            name: "AI Generated Section",
+            displayOrder: 1,
+            durationLimitMinutes: dto.durationMinutes,
+            questionCountRule: this.jsonValue({
+              source: "AI_EXAM_ENGINE",
+              blueprint: dto.blueprint,
+            }),
+            marksRule: this.jsonValue(dto.marksDistribution ?? {}),
+          },
+        },
+      },
+      include: { sections: true },
+    });
+    const sectionId = assessment.sections[0]?.id;
+    await this.prisma.assessmentQuestion.createMany({
+      data: questions.map((question, index) => ({
+        assessmentId: assessment.id,
+        sectionId,
+        questionId: question.id,
+        displayOrder: index + 1,
+        assignedMarks: question.defaultMarks,
+        assignedNegativeMarks: question.defaultNegativeMarks,
+      })),
+      skipDuplicates: true,
+    });
+    const paperSet = await this.prisma.aiGeneratedPaperSet.create({
+      data: {
+        collegeId,
+        assessmentId: assessment.id,
+        requestedById: user.id,
+        subjectId: dto.subjectId,
+        setCode: "PRIMARY",
+        title: assessment.title,
+        durationMinutes: dto.durationMinutes,
+        totalMarks: assessment.totalMarks,
+        questionIds: questions.map((question) => question.id),
+        blueprint: this.jsonValue({
+          syllabusId: dto.syllabusId,
+          blueprint: dto.blueprint,
+          chapterWeightage: dto.chapterWeightage,
+          difficultyDistribution: dto.difficultyDistribution,
+          bloomDistribution: dto.bloomDistribution,
+          marksDistribution: dto.marksDistribution,
+        }),
+        analytics: this.jsonValue(this.paperAnalytics(questions)),
+      },
+    });
+    await this.notify(
+      user,
+      collegeId,
+      NotificationType.AI_GENERATION_COMPLETED,
+      "AI paper generated",
+      `${assessment.title} is ready for review.`,
+      { assessmentId: assessment.id, paperSetId: paperSet.id },
+    );
+    return {
+      success: true,
+      data: { assessment, paperSet, questions, analytics: this.paperAnalytics(questions) },
+    };
+  }
+
+  async generateRandomPaperSets(
+    user: AuthenticatedUser,
+    dto: RandomPaperSetsDto,
+  ) {
+    this.ensureAiUser(user);
+    const collegeId = this.scopeCollege(user, dto.collegeId);
+    const setCodes = dto.setCodes?.length ? dto.setCodes : ["A", "B", "C", "D"];
+    const used = new Set<string>();
+    const sets = [];
+    for (const setCode of setCodes) {
+      const questions = (
+        await this.selectPaperQuestions(collegeId, dto.subjectId, dto.totalMarks, dto)
+      ).filter((question) => !used.has(question.id));
+      questions.forEach((question) => used.add(question.id));
+      const paperSet = await this.prisma.aiGeneratedPaperSet.create({
+        data: {
+          collegeId,
+          requestedById: user.id,
+          subjectId: dto.subjectId,
+          setCode,
+          title: `${dto.title ?? "AI Random Paper"} - Set ${setCode}`,
+          durationMinutes: dto.durationMinutes,
+          totalMarks: questions.reduce((sum, question) => sum + question.defaultMarks, 0),
+          questionIds: questions.map((question) => question.id),
+          blueprint: this.jsonValue({
+            noDuplicateAcrossSets: true,
+            blueprint: dto.blueprint,
+            difficultyDistribution: dto.difficultyDistribution,
+            bloomDistribution: dto.bloomDistribution,
+          }),
+          analytics: this.jsonValue(this.paperAnalytics(questions)),
+        },
+      });
+      sets.push({ ...paperSet, questions, analytics: this.paperAnalytics(questions) });
+    }
+    return { success: true, data: sets };
+  }
+
+  async listGeneratedPaperSets(user: AuthenticatedUser) {
+    this.ensureAiUser(user);
+    return {
+      success: true,
+      data: await this.prisma.aiGeneratedPaperSet.findMany({
+        where: this.plainCollegeWhere(user),
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+    };
+  }
+
+  async generateModelAnswer(user: AuthenticatedUser, dto: GenerateAnswerDto) {
+    this.ensureAiUser(user);
+    const question = await this.prisma.question.findFirst({
+      where: { id: dto.questionId, ...this.questionWhere(user) },
+      include: { options: true, codingQuestion: { include: { testCases: true } } },
+    });
+    if (!question) throw new NotFoundException("Question not found.");
+    const answer = this.modelAnswer(question, dto.language ?? "English");
+    const metadata = {
+      ...(question.metadata && typeof question.metadata === "object"
+        ? (question.metadata as Record<string, unknown>)
+        : {}),
+      modelAnswer: answer,
+      modelAnswerGeneratedAt: new Date().toISOString(),
+    };
+    const updated = await this.prisma.question.update({
+      where: { id: question.id },
+      data: { explanation: question.explanation ?? answer.summary, metadata },
+    });
+    return { success: true, data: { question: updated, answer } };
+  }
+
+  async questionAnalytics(user: AuthenticatedUser, id: string) {
+    this.ensureAiUser(user);
+    const question = await this.prisma.question.findFirst({
+      where: { id, ...this.questionWhere(user) },
+      include: { duplicateNewMatches: true, aiGenerationResults: true },
+    });
+    if (!question) throw new NotFoundException("Question not found.");
+    const aiResult = question.aiGenerationResults[0];
+    const duplicate = question.duplicateNewMatches[0];
+    return {
+      success: true,
+      data: {
+        questionId: question.id,
+        confidence: aiResult?.confidence ?? this.estimateConfidence(question.questionText ?? ""),
+        duplicateScore: duplicate?.similarityScore ?? 0,
+        estimatedDifficulty: question.difficulty,
+        estimatedSolvingTimeSeconds: this.estimatedSolvingTime(question),
+        bloomClassification:
+          aiResult?.approvedBloomLevel ??
+          this.classifyBloom(question.questionText ?? ""),
+        topicPrediction: question.topic ?? this.classifyTopic(question.questionText ?? ""),
+      },
+    };
+  }
+
+  async documentValidationReport(user: AuthenticatedUser, jobId: string) {
+    const response = await this.getDocumentJob(user, jobId);
+    const job = response.data;
+    return {
+      success: true,
+      data: {
+        jobId,
+        status: job.status,
+        importHistory: {
+          fileName: job.fileName,
+          sourceKind: job.sourceKind,
+          parserProvider: job.parserProvider,
+          ocrProvider: job.ocrProvider,
+          createdAt: job.createdAt,
+        },
+        validationReport: {
+          extractedChars: job.extractedChars,
+          candidateCount: job.candidateCount,
+          approvedCount: job.approvedCount,
+          validationErrors: job.validationErrors,
+        },
+        duplicatePreview: job.candidates.map((candidate) => ({
+          id: candidate.id,
+          questionText: candidate.questionText,
+          duplicateCandidate: candidate.duplicateCandidate,
+          duplicateReason: candidate.duplicateReason,
+        })),
+        syllabusMapping: job.candidates.map((candidate) => ({
+          id: candidate.id,
+          suggestedSubjectId: candidate.suggestedSubjectId ?? job.subjectId,
+          suggestedTopic: candidate.suggestedTopic,
+          sourceReference: candidate.sourceReference,
+        })),
+      },
+    };
+  }
+
+  private async selectPaperQuestions(
+    collegeId: string,
+    subjectId: string,
+    targetMarks: number,
+    dto: Pick<
+      ExamPaperGeneratorDto,
+      "difficultyDistribution" | "bloomDistribution" | "marksDistribution"
+    >,
+  ) {
+    const questions = await this.prisma.question.findMany({
+      where: {
+        collegeId,
+        subjectId,
+        deletedAt: null,
+        status: { in: [QuestionStatus.ACTIVE, QuestionStatus.DRAFT] },
+      },
+      include: {
+        options: true,
+        codingQuestion: { include: { testCases: true } },
+        aiGenerationResults: true,
+        duplicateNewMatches: true,
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      take: 250,
+    });
+    const selected = [];
+    let marks = 0;
+    for (const question of this.shuffle(questions)) {
+      if (marks >= targetMarks) break;
+      selected.push(question);
+      marks += question.defaultMarks;
+    }
+    void dto;
+    return selected;
+  }
+
+  private paperAnalytics(
+    questions: Array<{
+      questionType: QuestionType | null;
+      difficulty: QuestionDifficulty;
+      defaultMarks: number;
+      topic: string | null;
+      aiGenerationResults?: Array<{ confidence: number | null; approvedBloomLevel: BloomLevel | null }>;
+    }>,
+  ) {
+    return {
+      questionCount: questions.length,
+      totalMarks: questions.reduce((sum, question) => sum + question.defaultMarks, 0),
+      byType: this.countBy(questions.map((question) => question.questionType ?? "UNKNOWN")),
+      byDifficulty: this.countBy(questions.map((question) => question.difficulty)),
+      byBloom: this.countBy(
+        questions.map(
+          (question) =>
+            question.aiGenerationResults?.[0]?.approvedBloomLevel ?? "UNCLASSIFIED",
+        ),
+      ),
+      topics: this.countBy(questions.map((question) => question.topic ?? "Untitled")),
+      averageConfidence:
+        questions.reduce(
+          (sum, question) => sum + (question.aiGenerationResults?.[0]?.confidence ?? 0.6),
+          0,
+        ) / Math.max(1, questions.length),
+    };
+  }
+
+  private modelAnswer(
+    question: Prisma.QuestionGetPayload<{
+      include: { options: true; codingQuestion: { include: { testCases: true } } };
+    }>,
+    language: string,
+  ) {
+    const correctOptions = question.options
+      .filter((option) => option.isCorrect)
+      .map((option) => option.optionKey);
+    if (question.questionType === QuestionType.CODING && question.codingQuestion) {
+      return {
+        language,
+        summary: "Reference solution should satisfy public and hidden tests.",
+        starterCode: question.codingQuestion.starterCode,
+        constraints: question.codingQuestion.constraints,
+        expectedComplexity:
+          (question.metadata as Record<string, unknown> | null)?.expectedComplexity ??
+          "O(n) or better unless specified",
+        supportedLanguages: question.codingQuestion.allowedLanguages,
+        publicTests: question.codingQuestion.testCases.filter(
+          (test) => test.visibility === "PUBLIC",
+        ),
+        hiddenTests: question.codingQuestion.testCases.filter(
+          (test) => test.visibility !== "PUBLIC",
+        ),
+      };
+    }
+    if (
+      question.questionType === QuestionType.SINGLE_CHOICE ||
+      question.questionType === QuestionType.MULTIPLE_CHOICE ||
+      question.questionType === QuestionType.TRUE_FALSE
+    ) {
+      return {
+        language,
+        summary: `Correct option(s): ${correctOptions.join(", ") || "review required"}.`,
+        correctOptions,
+        explanation: question.explanation ?? "Review the keyed option rationale.",
+      };
+    }
+    if (question.questionType === QuestionType.NUMERICAL) {
+      return {
+        language,
+        summary: question.explanation ?? "Compute the numeric result and verify tolerance.",
+        expectedValue:
+          (question.metadata as Record<string, unknown> | null)?.expectedValue ?? null,
+      };
+    }
+    const promptText = question.questionText ?? question.title ?? "the question";
+    return {
+      language,
+      summary:
+        question.explanation ??
+        `A complete answer should address: ${promptText}.`,
+      rubric: [
+        "Defines the core concept.",
+        "Uses correct terminology.",
+        "Includes an example or justification where needed.",
+      ],
+    };
+  }
+
+  private estimatedSolvingTime(question: { questionText: string | null; questionType: QuestionType | null }) {
+    const words = (question.questionText ?? "").split(/\s+/).filter(Boolean).length;
+    const base =
+      question.questionType === QuestionType.CODING
+        ? 900
+        : question.questionType === QuestionType.DESCRIPTIVE
+          ? 420
+          : question.questionType === QuestionType.NUMERICAL
+            ? 180
+            : 75;
+    return base + words * 3;
+  }
+
+  private estimateConfidence(text: string) {
+    return Math.min(0.9, Math.max(0.35, text.length / 300));
+  }
+
+  private shuffle<T>(items: T[]) {
+    return [...items].sort((left, right) =>
+      this.hash(JSON.stringify(left)).localeCompare(this.hash(JSON.stringify(right))),
+    );
+  }
+
+  private async batchProgress(batchId: string, user: AuthenticatedUser) {
+    const batch = await this.getScopedBatch(user, batchId);
+    const jobs = await this.prisma.aiGenerationJob.findMany({
+      where: { id: { in: batch.jobIds } },
+      include: { results: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const completedCount = jobs.filter(
+      (job) => job.status === AiGenerationJobStatus.COMPLETED,
+    ).length;
+    const failedCount = jobs.filter(
+      (job) => job.status === AiGenerationJobStatus.FAILED,
+    ).length;
+    const cancelledCount = jobs.filter(
+      (job) => job.status === AiGenerationJobStatus.CANCELLED,
+    ).length;
+    const status =
+      cancelledCount > 0 && cancelledCount === jobs.length
+        ? AiGenerationJobStatus.CANCELLED
+        : failedCount > 0
+          ? AiGenerationJobStatus.PARTIALLY_COMPLETED
+          : completedCount === jobs.length && jobs.length > 0
+            ? AiGenerationJobStatus.COMPLETED
+            : AiGenerationJobStatus.PROCESSING;
+    return this.prisma.aiBatchGeneration.update({
+      where: { id: batchId },
+      data: {
+        completedCount,
+        failedCount,
+        cancelledCount,
+        status,
+        completedAt:
+          status === AiGenerationJobStatus.COMPLETED ? new Date() : batch.completedAt,
+      },
+    }).then((updated) => ({
+      ...updated,
+      jobs,
+      progressPercent:
+        jobs.length === 0 ? 0 : Math.round((completedCount / jobs.length) * 100),
+      generatedQuestions: jobs.reduce((sum, job) => sum + job.results.length, 0),
+    }));
+  }
+
+  private async getScopedBatch(user: AuthenticatedUser, batchId: string) {
+    const batch = await this.prisma.aiBatchGeneration.findFirst({
+      where: { id: batchId, ...this.plainCollegeWhere(user) },
+    });
+    if (!batch) throw new NotFoundException("AI batch generation not found.");
+    return batch;
+  }
+
   private async processGenerationJob(user: AuthenticatedUser, jobId: string) {
     const job = await this.prisma.aiGenerationJob.findUnique({
       where: { id: jobId },
@@ -1019,6 +1663,14 @@ export class AiWorkflowsService {
       });
       this.providerFactory.recordSuccess();
       await this.audit(user, AuditEvent.AI_GENERATION_COMPLETE, job.collegeId);
+      await this.notify(
+        user,
+        job.collegeId,
+        NotificationType.AI_GENERATION_COMPLETED,
+        "AI generation completed",
+        `${String(response.questions.length)} question(s) are ready for review.`,
+        { jobId },
+      );
     } catch (error) {
       const normalized = this.normalizeProviderError(error);
       await this.prisma.aiGenerationJob.update({
@@ -1041,6 +1693,14 @@ export class AiWorkflowsService {
         },
       });
       await this.audit(user, AuditEvent.AI_GENERATION_FAILURE, job.collegeId);
+      await this.notify(
+        user,
+        job.collegeId,
+        NotificationType.AI_GENERATION_FAILED,
+        "AI generation failed",
+        normalized.message,
+        { jobId, code: normalized.code },
+      );
     }
   }
 
@@ -1809,6 +2469,12 @@ export class AiWorkflowsService {
     return { collegeId: user.collegeId ?? "" };
   }
 
+  private plainCollegeWhere(user: AuthenticatedUser) {
+    return user.role === Role.SUPER_ADMIN
+      ? {}
+      : { collegeId: user.collegeId ?? "" };
+  }
+
   private promptWhere(user: AuthenticatedUser, id: string): Prisma.AiPromptTemplateWhereInput {
     return user.role === Role.SUPER_ADMIN
       ? { id }
@@ -1844,6 +2510,27 @@ export class AiWorkflowsService {
         userId: user.id,
         collegeId: collegeId ?? user.collegeId,
         actorRole: user.role,
+      },
+    });
+  }
+
+  private async notify(
+    user: AuthenticatedUser,
+    collegeId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    await this.prisma.notification.create({
+      data: {
+        collegeId,
+        userId: user.id,
+        type,
+        status: NotificationStatus.UNREAD,
+        title,
+        message,
+        metadata: metadata ? this.jsonValue(metadata) : undefined,
       },
     });
   }
