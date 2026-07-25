@@ -195,6 +195,18 @@
 - Add integration tests for platform authorization, tenant-scoped college analytics, faculty/student analytics, assessment analytics, question analytics, subject/topic analytics, comparisons, leaderboard ranking, report generation/download audit, and insight review.
 - Add analytics, reports, leaderboards, AI insights, performance, privacy, and report-security documentation.
 
+## Phase 15 - Secure Exam Monitoring, Review-Based Proctoring, Session Control, Evidence Management, Privacy, and Exam Security Operations
+
+- Add a dedicated `ProctoringModule` with student policy/consent/system-check/session APIs, proctor live-session APIs, review queue APIs, policy management, evidence access, retention jobs, and Swagger DTOs.
+- Add Prisma persistence for proctoring policies, sessions, events, warnings, evidence, evidence access audits, identity/environment checks, device sessions, heartbeats, reviews, decisions, overrides, retention jobs, live proctor assignments, and proctor notes.
+- Add review-based risk scoring for fullscreen exits, tab/window changes, copy/paste/context-menu events, network disconnects, second-session attempts, identity failures, and manual flags.
+- Keep automated signals advisory; final outcomes require human review and can hold/release results without exposing raw evidence storage keys.
+- Add tenant isolation and student ownership checks across proctoring sessions, reviews, policies, and evidence.
+- Add frontend routes for student consent/system check/session visibility, live proctor dashboards, proctor review queues, admin policy/settings pages, evidence retention, and assessment-level monitoring.
+- Seed Demo College proctoring policies, a flagged metadata-only session, events, warning, evidence metadata, identity/environment checks, heartbeat, review decision, retention job, and live proctor assignment.
+- Add integration tests for consent, system check, event batching/idempotency, heartbeat, evidence privacy, role rejection, proctor warning/flag, review decision, evidence access audit, and retention.
+- Add proctoring, privacy, consent, security, operations, and evidence-retention documentation.
+
 ## Verification
 
 - Install dependencies.
@@ -209,3 +221,4 @@
 - For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.
 - For Phase 13, also verify `/questions/ai-batch`, `/assessments/ai-paper`, `/assessments/random-sets`, batch progress/cancel/retry APIs, generated paper-set APIs, model-answer APIs, prompt rollback, validation reports, question analytics, notifications, Swagger, and worker/API readiness.
 - For Phase 14, also verify `/super-admin/analytics`, `/admin/analytics`, `/faculty/analytics`, `/student/analytics`, `/analytics/compare`, `/leaderboards`, `/reports/builder`, `/reports/jobs`, `/analytics/insights`, analytics/report APIs, report download audit, leaderboard policy, AI insight review, and the predictive analytics limitations notice.
+- For Phase 15, also verify `/student/proctoring`, `/proctor/live`, `/proctor/reviews`, `/admin/proctoring/settings`, `/admin/proctoring/policies`, `/admin/proctoring/retention`, `/assessments/:id/proctoring`, `/assessments/:id/proctoring-reviews`, proctoring policy/session/review/evidence APIs, evidence access audit, retention job execution, Swagger, and the privacy/consent docs.

@@ -14,6 +14,7 @@ import { ExamOperationsModule } from "./exam-operations/exam-operations.module";
 import { HealthModule } from "./health/health.module";
 import { MaintenanceMiddleware } from "./maintenance/maintenance.middleware";
 import { PrismaModule } from "./prisma/prisma.module";
+import { ProctoringModule } from "./proctoring/proctoring.module";
 import { QuestionBankModule } from "./question-bank/question-bank.module";
 import { RedisModule } from "./redis/redis.module";
 import { StorageModule } from "./storage/storage.module";
@@ -40,6 +41,7 @@ import { SystemModule } from "./system/system.module";
     EmailModule,
     ExamOperationsModule,
     PrismaModule,
+    ProctoringModule,
     QuestionBankModule,
     RedisModule,
     StorageModule,

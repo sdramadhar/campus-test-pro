@@ -10,11 +10,19 @@ import {
   DocumentImportStatus,
   DuplicateReviewStatus,
   EntityStatus,
+  EnvironmentCheckStatus,
   Gender,
+  FullscreenExitPolicy,
+  IdentityCheckStatus,
   ModerationStatus,
+  MultipleSessionPolicy,
   NotificationStatus,
   NotificationType,
   PrismaClient,
+  ProctoringEventType,
+  ProctoringEvidenceType,
+  ProctoringReviewStatus,
+  ProctoringSessionStatus,
   QuestionDifficulty,
   QuestionStatus,
   QuestionType,
@@ -27,6 +35,8 @@ import {
   Role,
   SubmissionStatus,
   TestCaseVisibility,
+  WebcamSnapshotMode,
+  ScreenCaptureMode,
 } from "../generated/phase5-client";
 import * as argon2 from "argon2";
 import { config } from "dotenv";
@@ -1979,6 +1989,369 @@ async function main(): Promise<void> {
       action: "SEED_DOWNLOAD_AUDIT",
       metadata: { phase: 14 },
     },
+  });
+
+  await prisma.evidenceAccessAudit.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringReviewDecision.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringOverride.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.liveProctorNote.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.liveProctorAssignment.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.sessionHeartbeat.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.deviceSession.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.environmentCheck.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.identityCheck.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringEvidence.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringWarning.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringEvent.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringReview.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringSession.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringRetentionJob.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.proctoringPolicy.deleteMany({ where: { collegeId: demoCollege.id } });
+
+  const disabledPolicy = await prisma.proctoringPolicy.create({
+    data: {
+      id: "seed-proctoring-policy-disabled",
+      collegeId: demoCollege.id,
+      name: "Monitoring Disabled",
+      proctoringEnabled: false,
+      isDefault: true,
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+      institutionPrivacyNotice: "Demo monitoring is disabled unless an assessment-specific policy is enabled.",
+    },
+  });
+
+  await prisma.proctoringPolicy.create({
+    data: {
+      id: "seed-proctoring-policy-moderate",
+      collegeId: demoCollege.id,
+      name: "Moderate Review Monitoring",
+      proctoringEnabled: true,
+      fullscreenRequired: true,
+      fullscreenExitPolicy: FullscreenExitPolicy.WARN,
+      tabSwitchMonitoring: true,
+      copyMonitoring: true,
+      pasteMonitoring: true,
+      contextMenuMonitoring: true,
+      keyboardShortcutMonitoring: true,
+      multipleSessionPolicy: MultipleSessionPolicy.WARN_ONLY,
+      evidenceRetentionDays: 30,
+      institutionPrivacyNotice: "Demo policy records browser and session security events for human review.",
+      emergencySupportContact: "support@demo-college.local",
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+    },
+  });
+
+  const strictPolicy = await prisma.proctoringPolicy.create({
+    data: {
+      id: "seed-proctoring-policy-strict",
+      collegeId: demoCollege.id,
+      assessmentId: activeExam.id,
+      name: "Strict Exam Monitoring",
+      proctoringEnabled: true,
+      consentRequired: true,
+      fullscreenRequired: true,
+      fullscreenExitPolicy: FullscreenExitPolicy.FLAG,
+      tabSwitchMonitoring: true,
+      copyMonitoring: true,
+      pasteMonitoring: true,
+      contextMenuMonitoring: true,
+      keyboardShortcutMonitoring: true,
+      multipleSessionPolicy: MultipleSessionPolicy.BLOCK_SECOND_SESSION,
+      webcamRequired: false,
+      webcamSnapshotMode: WebcamSnapshotMode.EVENT_TRIGGERED,
+      microphoneRequired: false,
+      screenShareRequired: false,
+      screenCaptureMode: ScreenCaptureMode.EVENT_TRIGGERED,
+      identityCheckRequired: true,
+      environmentCheckRequired: true,
+      warningThreshold: 2,
+      flagThreshold: 3,
+      evidenceRetentionDays: 45,
+      institutionPrivacyNotice: "Demo policy stores only event metadata and private evidence references for reviewer access.",
+      emergencySupportContact: "exam-desk@demo-college.local",
+      riskWeights: { FULLSCREEN_EXIT: 20, TAB_HIDDEN: 6, NETWORK_DISCONNECT: 12, SECOND_SESSION_ATTEMPT: 25 },
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+    },
+  });
+
+  const proctoringSession = await prisma.proctoringSession.create({
+    data: {
+      id: "seed-proctoring-session-phase15",
+      collegeId: demoCollege.id,
+      assessmentId: activeExam.id,
+      attemptId: completedAttempt.id,
+      studentId: student.id,
+      policyId: strictPolicy.id,
+      policySnapshot: {
+        id: strictPolicy.id,
+        name: strictPolicy.name,
+        proctoringEnabled: true,
+        consentRequired: true,
+        fullscreenExitPolicy: FullscreenExitPolicy.FLAG,
+        tabSwitchMonitoring: true,
+        evidenceRetentionDays: 45,
+        riskWeights: { FULLSCREEN_EXIT: 20, TAB_HIDDEN: 6, NETWORK_DISCONNECT: 12, SECOND_SESSION_ATTEMPT: 25 },
+      },
+      status: ProctoringSessionStatus.FLAGGED,
+      consentAcceptedAt: new Date("2026-07-25T08:10:00.000Z"),
+      consentVersion: "phase15-demo-v1",
+      startedAt: new Date("2026-07-25T08:12:00.000Z"),
+      endedAt: new Date("2026-07-25T09:12:00.000Z"),
+      lastHeartbeatAt: new Date("2026-07-25T09:11:45.000Z"),
+      warningCount: 2,
+      flagCount: 1,
+      riskScore: 38,
+      riskLevel: "MEDIUM",
+      riskContributors: [{ eventType: ProctoringEventType.FULLSCREEN_EXIT, weight: 20 }],
+      reviewStatus: ProctoringReviewStatus.PENDING,
+    },
+  });
+
+  await prisma.proctoringEvent.createMany({
+    data: [
+      {
+        collegeId: demoCollege.id,
+        sessionId: proctoringSession.id,
+        attemptId: completedAttempt.id,
+        studentId: student.id,
+        eventType: ProctoringEventType.CONSENT_ACCEPTED,
+        severity: "INFO",
+        sequenceNumber: 1,
+        idempotencyKey: "seed-phase15-consent",
+        clientTimestamp: new Date("2026-07-25T08:10:01.000Z"),
+        metadata: { consentVersion: "phase15-demo-v1" },
+      },
+      {
+        collegeId: demoCollege.id,
+        sessionId: proctoringSession.id,
+        attemptId: completedAttempt.id,
+        studentId: student.id,
+        eventType: ProctoringEventType.FULLSCREEN_EXIT,
+        severity: "HIGH",
+        sequenceNumber: 2,
+        idempotencyKey: "seed-phase15-fullscreen",
+        clientTimestamp: new Date("2026-07-25T08:33:00.000Z"),
+        metadata: { studentVisible: true },
+        riskDelta: 20,
+      },
+      {
+        collegeId: demoCollege.id,
+        sessionId: proctoringSession.id,
+        attemptId: completedAttempt.id,
+        studentId: student.id,
+        eventType: ProctoringEventType.TAB_HIDDEN,
+        severity: "WARN",
+        sequenceNumber: 3,
+        idempotencyKey: "seed-phase15-tab",
+        clientTimestamp: new Date("2026-07-25T08:33:20.000Z"),
+        metadata: { durationSeconds: 3 },
+        riskDelta: 6,
+      },
+      {
+        collegeId: demoCollege.id,
+        sessionId: proctoringSession.id,
+        attemptId: completedAttempt.id,
+        studentId: student.id,
+        eventType: ProctoringEventType.NETWORK_DISCONNECT,
+        severity: "WARN",
+        sequenceNumber: 4,
+        idempotencyKey: "seed-phase15-network",
+        clientTimestamp: new Date("2026-07-25T08:44:20.000Z"),
+        metadata: { reconnectSafe: true },
+        riskDelta: 12,
+      },
+    ],
+  });
+
+  await prisma.proctoringWarning.create({
+    data: {
+      id: "seed-proctoring-warning-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      attemptId: completedAttempt.id,
+      warningType: "FULLSCREEN_EXIT",
+      message: "Please return to the expected exam state.",
+      createdById: faculty.id,
+    },
+  });
+
+  const evidence = await prisma.proctoringEvidence.create({
+    data: {
+      id: "seed-proctoring-evidence-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      attemptId: completedAttempt.id,
+      studentId: student.id,
+      evidenceType: ProctoringEvidenceType.CAMERA_SNAPSHOT,
+      fileName: "metadata-only-camera-snapshot.png",
+      mimeType: "image/png",
+      sizeBytes: 1024,
+      storageKey: "proctoring/demo/phase15/metadata-only-camera-snapshot.png",
+      checksum: "phase15-demo-checksum",
+      capturedAt: new Date("2026-07-25T08:33:02.000Z"),
+      expiresAt: new Date("2026-09-08T00:00:00.000Z"),
+      createdById: student.id,
+      metadata: { phase: 15, containsRealImage: false, private: true },
+    },
+  });
+
+  await prisma.evidenceAccessAudit.create({
+    data: {
+      collegeId: demoCollege.id,
+      evidenceId: evidence.id,
+      userId: collegeAdmin.id,
+      action: "SEED_REVIEW_ACCESS",
+      metadata: { phase: 15, redacted: true },
+    },
+  });
+
+  await prisma.identityCheck.create({
+    data: {
+      id: "seed-identity-check-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      attemptId: completedAttempt.id,
+      studentId: student.id,
+      status: IdentityCheckStatus.NEEDS_REVIEW,
+      reviewedById: faculty.id,
+      reviewedAt: new Date("2026-07-25T09:20:00.000Z"),
+      notes: "Demo metadata-only identity check for reviewer workflow.",
+      metadata: { phase: 15, noBiometricInference: true },
+    },
+  });
+
+  await prisma.environmentCheck.create({
+    data: {
+      id: "seed-environment-check-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      attemptId: completedAttempt.id,
+      studentId: student.id,
+      status: EnvironmentCheckStatus.SUBMITTED,
+      reviewedById: faculty.id,
+      reviewedAt: new Date("2026-07-25T09:21:00.000Z"),
+      notes: "Demo workspace check awaiting human confirmation.",
+      metadata: { phase: 15, privateEvidenceOnly: true },
+    },
+  });
+
+  await prisma.deviceSession.create({
+    data: {
+      id: "seed-device-session-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      attemptId: completedAttempt.id,
+      studentId: student.id,
+      deviceHash: "seed-phase15-device-hash",
+      userAgentHash: "seed-phase15-agent-hash",
+      metadata: { phase: 15, minimalFingerprint: true, ipHashStoredAsMetadata: true },
+    },
+  });
+
+  await prisma.sessionHeartbeat.create({
+    data: {
+      id: "seed-heartbeat-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      attemptId: completedAttempt.id,
+      sequenceNumber: 1,
+      clientTimestamp: new Date("2026-07-25T08:12:30.000Z"),
+      connectivityState: "online",
+      cameraState: "not-required",
+      microphoneState: "not-required",
+      screenShareState: "not-required",
+      fullscreenState: "active",
+    },
+  });
+
+  const review = await prisma.proctoringReview.create({
+    data: {
+      id: "seed-proctoring-review-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      assessmentId: activeExam.id,
+      attemptId: completedAttempt.id,
+      studentId: student.id,
+      assignedReviewerId: faculty.id,
+      status: ProctoringReviewStatus.PENDING,
+      resultHeld: true,
+      resultHoldReason: "Seeded review pending for Phase 15 workflow.",
+      decisionReason: "Demo case for review queue, evidence audit, and result hold handling.",
+    },
+  });
+
+  await prisma.proctoringReviewDecision.create({
+    data: {
+      collegeId: demoCollege.id,
+      reviewId: review.id,
+      sessionId: proctoringSession.id,
+      reviewerId: faculty.id,
+      decision: ProctoringReviewStatus.NEEDS_FOLLOW_UP,
+      reason: "Seeded reviewer decision requiring follow-up.",
+    },
+  });
+
+  await prisma.proctoringRetentionJob.create({
+    data: {
+      id: "seed-proctoring-retention-phase15",
+      collegeId: demoCollege.id,
+      status: AnalyticsJobStatus.COMPLETED,
+      cutoffAt: new Date("2026-09-08T00:00:00.000Z"),
+      startedAt: new Date("2026-07-25T09:30:00.000Z"),
+      completedAt: new Date("2026-07-25T09:30:05.000Z"),
+      deletedCount: 0,
+    },
+  });
+
+  await prisma.liveProctorAssignment.create({
+    data: {
+      id: "seed-live-proctor-assignment-phase15",
+      collegeId: demoCollege.id,
+      assessmentId: activeExam.id,
+      proctorId: faculty.id,
+      createdById: collegeAdmin.id,
+      active: true,
+    },
+  });
+
+  await prisma.liveProctorNote.create({
+    data: {
+      id: "seed-live-proctor-note-phase15",
+      collegeId: demoCollege.id,
+      sessionId: proctoringSession.id,
+      proctorId: faculty.id,
+      note: "Student-visible warnings are neutral; internal notes stay reviewer-only.",
+      visibility: "INTERNAL",
+    },
+  });
+
+  await prisma.auditLog.createMany({
+    data: [
+      {
+        userId: student.id,
+        collegeId: demoCollege.id,
+        event: "PROCTORING_CONSENT",
+        actorRole: Role.STUDENT,
+        metadata: { phase: 15, policyId: strictPolicy.id },
+      },
+      {
+        userId: collegeAdmin.id,
+        collegeId: demoCollege.id,
+        event: "PROCTORING_POLICY_UPDATE",
+        actorRole: Role.COLLEGE_ADMIN,
+        metadata: { phase: 15, disabledPolicyId: disabledPolicy.id, strictPolicyId: strictPolicy.id },
+      },
+      {
+        userId: faculty.id,
+        collegeId: demoCollege.id,
+        event: "PROCTORING_REVIEW",
+        actorRole: Role.FACULTY,
+        metadata: { phase: 15, reviewId: review.id },
+      },
+    ],
   });
 
   console.log(`Seeded CampusTest Pro with super admin ${superAdmin.email}.`);

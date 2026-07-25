@@ -1069,6 +1069,47 @@ h1 {
   grid-template-columns: 1.4fr 0.9fr 0.8fr 1fr;
 }
 
+.stats-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.metric-card span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.82rem;
+  margin-bottom: 0.45rem;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: var(--ink);
+  display: block;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.json-preview {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  max-height: 34rem;
+  overflow: auto;
+  padding: 1rem;
+  white-space: pre-wrap;
+}
+
 :root[data-theme="dark"] .login-panel,
 :root[data-theme="dark"] .panel,
 :root[data-theme="dark"] .metrics article,

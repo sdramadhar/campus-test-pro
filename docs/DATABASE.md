@@ -54,3 +54,26 @@ These records are college-scoped where applicable and link back to existing user
 Phase 14 adds analytics metadata tables rather than duplicating raw answer payloads: `AnalyticsSnapshot`, `AnalyticsAggregationJob`, `ReportDefinition`, `ReportGenerationJob`, `ReportFile`, `ReportSchedule`, `SavedDashboard`, `SavedFilter`, `AnalyticsInsight`, `StudentPerformanceSnapshot`, `AssessmentPerformanceSnapshot`, `QuestionPerformanceSnapshot`, `LeaderboardSnapshot`, `BenchmarkSnapshot`, and `ExportAudit`.
 
 Raw attempts, answers, results, questions, assignments, and AI usage remain the source of truth. Snapshot tables are indexed by tenant, assessment, student, question, status, and date where appropriate.
+
+# Phase 15 Proctoring Data
+
+Phase 15 adds:
+
+- `ProctoringPolicy`
+- `ProctoringSession`
+- `ProctoringEvent`
+- `ProctoringWarning`
+- `ProctoringEvidence`
+- `EvidenceAccessAudit`
+- `IdentityCheck`
+- `EnvironmentCheck`
+- `DeviceSession`
+- `SessionHeartbeat`
+- `ProctoringReview`
+- `ProctoringReviewDecision`
+- `ProctoringOverride`
+- `ProctoringRetentionJob`
+- `LiveProctorAssignment`
+- `LiveProctorNote`
+
+Records are college-scoped and indexed by tenant, assessment, student, session, status, and timestamps. Evidence stores private storage keys and safe metadata; student-facing APIs return safe evidence views rather than raw storage references.

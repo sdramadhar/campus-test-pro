@@ -178,6 +178,24 @@ const navItems: Array<{
     icon: "activity",
   },
   {
+    roles: adminRoles,
+    href: "/admin/proctoring/settings",
+    label: "Proctoring Settings",
+    icon: "shield",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/proctoring/policies",
+    label: "Proctoring Policies",
+    icon: "permissions",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/proctoring/retention",
+    label: "Evidence Retention",
+    icon: "audit",
+  },
+  {
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
     href: "/questions",
     label: "Question Bank",
@@ -257,6 +275,18 @@ const navItems: Array<{
   },
   {
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/proctor/live",
+    label: "Live Proctoring",
+    icon: "shield",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/proctor/reviews",
+    label: "Proctor Reviews",
+    icon: "reviews",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
     href: "/exam-operations",
     label: "Operations",
     icon: "operations",
@@ -298,6 +328,12 @@ const navItems: Array<{
     icon: "results",
   },
   { roles: ["STUDENT"], href: "/student/tests", label: "Tests", icon: "tests" },
+  {
+    roles: ["STUDENT"],
+    href: "/student/proctoring",
+    label: "Proctoring",
+    icon: "shield",
+  },
   {
     roles: ["STUDENT"],
     href: "/student/results",

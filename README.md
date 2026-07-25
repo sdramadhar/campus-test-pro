@@ -360,6 +360,28 @@ Worker:
 - API readiness: http://localhost:4000/ready
 - Swagger: http://localhost:4000/api/docs
 
+## Phase 15 Secure Exam Monitoring
+
+Phase 15 adds review-based proctoring with policy management, student consent, system checks, event batching, session heartbeats, private evidence metadata, live proctor dashboards, review queues, result hold/release, and evidence retention.
+
+Key routes:
+
+- `/student/proctoring`
+- `/proctor/live`
+- `/proctor/reviews`
+- `/admin/proctoring/settings`
+- `/admin/proctoring/policies`
+- `/admin/proctoring/retention`
+
+Documentation:
+
+- `docs/PROCTORING.md`
+- `docs/PROCTORING_PRIVACY.md`
+- `docs/PROCTORING_CONSENT.md`
+- `docs/PROCTORING_SECURITY.md`
+- `docs/PROCTORING_OPERATIONS.md`
+- `docs/EVIDENCE_RETENTION.md`
+
 ## Phase 9 Production Readiness
 
 Phase 9 adds production deployment hardening while preserving local Docker development support.

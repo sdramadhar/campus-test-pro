@@ -22,3 +22,9 @@ AI workflows keep provider secrets on the server, reject mock provider mode in p
 Analytics and reporting endpoints use JWT authentication, role guards, tenant scoping, faculty assignment checks, published-result restrictions for student views, expiring report files, and export audit logging. CSV output escapes formula-leading values. AI insights use aggregate payloads and are labelled as suggestions requiring human review.
 
 See `docs/ANALYTICS_PRIVACY.md` and `docs/REPORT_SECURITY.md` for the detailed privacy and report download controls.
+
+# Phase 15 Proctoring Security
+
+Proctoring endpoints are protected by JWT, role guards, tenant isolation, and student ownership checks. Event signals are advisory and require human review for final decisions. Evidence APIs return safe metadata views, avoid raw storage-key exposure in student-facing responses, and audit reviewer access.
+
+See `docs/PROCTORING_SECURITY.md`, `docs/PROCTORING_PRIVACY.md`, and `docs/EVIDENCE_RETENTION.md`.

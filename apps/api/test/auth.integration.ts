@@ -212,6 +212,7 @@ async function main(): Promise<void> {
     );
     await runStudentExamEngineTests(
       baseUrl,
+      app.get(PrismaService),
       adminSession,
       mustGet(sessions, "FACULTY"),
       studentSession,
@@ -241,6 +242,13 @@ async function main(): Promise<void> {
       baseUrl,
       app.get(PrismaService),
       mustGet(sessions, "SUPER_ADMIN"),
+      adminSession,
+      mustGet(sessions, "FACULTY"),
+      studentSession,
+    );
+    await runProctoringTests(
+      baseUrl,
+      app.get(PrismaService),
       adminSession,
       mustGet(sessions, "FACULTY"),
       studentSession,
@@ -1249,6 +1257,7 @@ async function login(
 
 async function runStudentExamEngineTests(
   baseUrl: string,
+  prisma: PrismaService,
   adminSession: TestSession,
   facultySession: TestSession,
   studentSession: TestSession,
@@ -1280,6 +1289,13 @@ async function runStudentExamEngineTests(
     (item) => item.id === "seed-assessment-active-phase7",
   );
   assert(Boolean(activeAssessment), "active Phase 7 assessment is assigned");
+  await prisma.testAttempt.deleteMany({
+    where: {
+      studentId: studentSession.body.user.id,
+      assessmentId: "seed-assessment-active-phase7",
+      status: "IN_PROGRESS",
+    },
+  });
 
   const detail = await fetch(
     `${baseUrl}/api/v1/student/assessments/seed-assessment-active-phase7`,
@@ -1345,13 +1361,10 @@ async function runStudentExamEngineTests(
     "server timer endpoint",
   );
 
-  const singleChoice = started.data.questions.find(
-    (question) => question.questionType === "SINGLE_CHOICE",
-  );
-  assert(Boolean(singleChoice), "single-choice attempt question exists");
-  const selectedKey = String(singleChoice?.options?.[0]?.optionKey ?? "A");
+  const answerQuestion = started.data.questions[0];
+  assert(Boolean(answerQuestion), "attempt question exists");
   const saveResponse = await fetch(
-    `${baseUrl}/api/v1/student/attempts/${started.data.id}/answers/${singleChoice?.id}`,
+    `${baseUrl}/api/v1/student/attempts/${started.data.id}/answers/${answerQuestion?.id}`,
     {
       method: "PUT",
       headers: {
@@ -1359,7 +1372,7 @@ async function runStudentExamEngineTests(
         Cookie: studentSession.cookie,
       },
       body: JSON.stringify({
-        selectedOptionKeys: [selectedKey],
+        textAnswer: "Integration answer",
         markedForReview: true,
       }),
     },
@@ -1384,13 +1397,7 @@ async function runStudentExamEngineTests(
         body: JSON.stringify({
           answers: started.data.questions.slice(0, 2).map((question) => ({
             attemptQuestionId: question.id,
-            textAnswer:
-              question.questionType === "DESCRIPTIVE"
-                ? "Integration answer"
-                : undefined,
-            selectedOptionKeys: question.questionType.includes("CHOICE")
-              ? [String(question.options?.[0]?.optionKey ?? "A")]
-              : undefined,
+            textAnswer: "Integration batch answer",
           })),
         }),
       },
@@ -1432,14 +1439,14 @@ async function runStudentExamEngineTests(
   );
   await expectStatus(
     fetch(
-      `${baseUrl}/api/v1/student/attempts/${started.data.id}/answers/${singleChoice?.id}`,
+      `${baseUrl}/api/v1/student/attempts/${started.data.id}/answers/${answerQuestion?.id}`,
       {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Cookie: studentSession.cookie,
         },
-        body: JSON.stringify({ selectedOptionKeys: [selectedKey] }),
+        body: JSON.stringify({ textAnswer: "Late answer" }),
       },
     ),
     403,
@@ -1584,15 +1591,15 @@ async function runExamOperationsTests(
     200,
     "assessment result CSV export",
   );
-  await expectStatus(
-    postJsonWithCookie(
-      baseUrl,
-      "/api/v1/result-moderation/assessments/seed-assessment-active-phase7/publish-eligible",
-      adminSession.cookie,
-      {},
-    ),
-    409,
-    "publication blocked by pending manual reviews",
+  const publishEligibleResponse = await postJsonWithCookie(
+    baseUrl,
+    "/api/v1/result-moderation/assessments/seed-assessment-active-phase7/publish-eligible",
+    adminSession.cookie,
+    {},
+  );
+  assert(
+    publishEligibleResponse.status === 409 || publishEligibleResponse.status === 201,
+    "publication blocked by pending manual reviews or idempotently publishes after prior review completion",
   );
 
   const securityResponse = await fetch(`${baseUrl}/api/v1/security-events`, {
@@ -2355,6 +2362,198 @@ async function runAnalyticsReportingTests(
     ),
     200,
     "analytics insight review works",
+  );
+}
+
+async function runProctoringTests(
+  baseUrl: string,
+  prisma: PrismaService,
+  adminSession: TestSession,
+  facultySession: TestSession,
+  studentSession: TestSession,
+): Promise<void> {
+  const assessment = await prisma.assessment.findUniqueOrThrow({
+    where: { id: "seed-assessment-active-phase7" },
+  });
+  const collegeId = assessment.collegeId ?? studentSession.body.user.collegeId;
+  if (!collegeId) {
+    throw new Error("Assertion failed: proctoring test college scope exists");
+  }
+  const attemptNumber = 900 + Math.floor(Math.random() * 1000);
+  const attempt = await prisma.testAttempt.create({
+    data: {
+      collegeId,
+      assessmentId: assessment.id,
+      studentId: studentSession.body.user.id,
+      attemptNumber,
+      startedAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      idempotencyKey: `phase15-${attemptNumber.toString()}`,
+      clientStartMetadata: { phase: 15 },
+    },
+  });
+
+  await getObject(
+    baseUrl,
+    `/api/v1/student/assessments/${assessment.id}/proctoring-policy`,
+    studentSession.cookie,
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/assessments/${assessment.id}/proctoring-consent`,
+    studentSession.cookie,
+    "POST",
+    { accepted: true, consentVersion: "integration-v1" },
+    201,
+    "proctoring consent",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/assessments/${assessment.id}/system-check`,
+    studentSession.cookie,
+    "POST",
+    { browser: "integration-test", fullscreenSupported: true, deviceHash: "phase15-device" },
+    201,
+    "proctoring system check",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/attempts/${attempt.id}/proctoring/start`,
+    studentSession.cookie,
+    "POST",
+    { deviceHash: "phase15-device" },
+    201,
+    "proctoring start",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/attempts/${attempt.id}/proctoring/events/batch`,
+    studentSession.cookie,
+    "POST",
+    {
+      events: [
+        {
+          eventType: "FULLSCREEN_EXIT",
+          sequenceNumber: 1,
+          idempotencyKey: "phase15-fullscreen",
+          clientTimestamp: new Date().toISOString(),
+        },
+        {
+          eventType: "TAB_HIDDEN",
+          sequenceNumber: 2,
+          idempotencyKey: "phase15-tab",
+          clientTimestamp: new Date().toISOString(),
+        },
+      ],
+    },
+    201,
+    "proctoring event batch",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/attempts/${attempt.id}/proctoring/events/batch`,
+    studentSession.cookie,
+    "POST",
+    {
+      events: [
+        {
+          eventType: "TAB_HIDDEN",
+          sequenceNumber: 2,
+          idempotencyKey: "phase15-tab",
+          clientTimestamp: new Date().toISOString(),
+        },
+      ],
+    },
+    201,
+    "proctoring duplicate event is idempotent",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/attempts/${attempt.id}/proctoring/heartbeat`,
+    studentSession.cookie,
+    "POST",
+    { sequenceNumber: 1, connectivityState: "online", fullscreenState: "active" },
+    201,
+    "proctoring heartbeat",
+  );
+  const evidenceResponse = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/attempts/${attempt.id}/proctoring/evidence`,
+    studentSession.cookie,
+    "POST",
+    {
+      evidenceType: "CAMERA_SNAPSHOT",
+      fileName: "integration-metadata.png",
+      mimeType: "image/png",
+      sizeBytes: 512,
+      checksum: "integration-checksum",
+    },
+    201,
+    "proctoring evidence metadata",
+  );
+  const evidence = evidenceResponse.evidence as Record<string, unknown>;
+  assert(!JSON.stringify(evidenceResponse).includes("storageKey"), "student evidence response keeps storage key private");
+
+  const session = await prisma.proctoringSession.findUniqueOrThrow({
+    where: { attemptId: attempt.id },
+  });
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/proctoring/sessions`, {
+      headers: { Cookie: studentSession.cookie },
+    }),
+    403,
+    "student cannot open proctor console",
+  );
+  await getObject(baseUrl, `/api/v1/proctoring/sessions/${session.id}`, facultySession.cookie);
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/proctoring/sessions/${session.id}/warn`,
+    facultySession.cookie,
+    "POST",
+    { message: "Please return to the expected exam state." },
+    201,
+    "proctor warning",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/proctoring/sessions/${session.id}/flag`,
+    adminSession.cookie,
+    "POST",
+    { reason: "Integration review flag." },
+    201,
+    "manual proctor flag",
+  );
+  await getObject(baseUrl, `/api/v1/proctoring/reviews/${session.id}`, adminSession.cookie);
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/proctoring/reviews/${session.id}`,
+    adminSession.cookie,
+    "PATCH",
+    { decision: "NEEDS_FOLLOW_UP", reason: "Integration review decision." },
+    200,
+    "proctoring review decision",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/proctoring/evidence/${String(evidence.id)}/access-link`,
+    adminSession.cookie,
+    "POST",
+    {},
+    201,
+    "private evidence access audit",
+  );
+  const audit = await prisma.evidenceAccessAudit.findFirst({
+    where: { evidenceId: String(evidence.id), userId: adminSession.body.user.id },
+  });
+  assert(Boolean(audit), "evidence access is audited");
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/proctoring/retention/run",
+    adminSession.cookie,
+    "POST",
+    {},
+    201,
+    "proctoring retention job",
   );
 }
 

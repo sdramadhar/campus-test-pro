@@ -109,3 +109,39 @@ AI and imported questions are review-first and save to the existing Question Ban
 Phase 14 adds protected endpoints for platform, college, faculty, student, assessment, question, subject, topic, comparison, leaderboard, report, and AI-insight analytics under `/api/v1/analytics`, `/api/v1/reports`, `/api/v1/report-jobs`, `/api/v1/report-files`, `/api/v1/assessments/:id/analytics`, and `/api/v1/questions/:id/analytics`.
 
 Swagger at `/api/docs` documents the controller methods. See `docs/ANALYTICS.md`, `docs/REPORTS.md`, `docs/LEADERBOARDS.md`, and `docs/AI_INSIGHTS.md` for formulas and security notes.
+
+# Phase 15 Proctoring API
+
+Phase 15 adds protected review-based proctoring endpoints under `/api/v1`.
+
+Student routes:
+
+- `GET /student/assessments/:assessmentId/proctoring-policy`
+- `POST /student/assessments/:assessmentId/proctoring-consent`
+- `POST /student/assessments/:assessmentId/system-check`
+- `POST /student/attempts/:attemptId/proctoring/start`
+- `GET /student/attempts/:attemptId/proctoring/session`
+- `POST /student/attempts/:attemptId/proctoring/events/batch`
+- `POST /student/attempts/:attemptId/proctoring/heartbeat`
+- `POST /student/attempts/:attemptId/proctoring/evidence`
+- `POST /student/attempts/:attemptId/proctoring/end`
+
+Proctor/admin routes:
+
+- `GET /proctoring/sessions`
+- `GET /proctoring/sessions/:sessionId`
+- `POST /proctoring/sessions/:sessionId/warn`
+- `POST /proctoring/sessions/:sessionId/message`
+- `POST /proctoring/sessions/:sessionId/flag`
+- `POST /proctoring/sessions/:sessionId/clear`
+- `GET /proctoring/reviews`
+- `GET /proctoring/reviews/:sessionId`
+- `PATCH /proctoring/reviews/:sessionId`
+- `POST /proctoring/reviews/:sessionId/hold-result`
+- `POST /proctoring/reviews/:sessionId/release-result`
+- `GET|POST|PATCH /proctoring/policies`
+- `GET /proctoring/evidence/:id`
+- `POST /proctoring/evidence/:id/access-link`
+- `POST /proctoring/retention/run`
+
+Swagger documents DTO validation, enums, and role-protected operations.

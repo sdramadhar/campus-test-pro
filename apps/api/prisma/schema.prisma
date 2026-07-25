@@ -80,6 +80,121 @@ enum AuditEvent {
   REPORT_CREATE
   REPORT_RUN
   ANALYTICS_INSIGHT_REVIEW
+  PROCTORING_POLICY_UPDATE
+  PROCTORING_CONSENT
+  PROCTORING_EVENT
+  PROCTORING_REVIEW
+  PROCTORING_EVIDENCE_ACCESS
+  PROCTORING_OVERRIDE
+}
+
+enum FullscreenExitPolicy {
+  LOG_ONLY
+  WARN
+  FLAG
+}
+
+enum MultipleSessionPolicy {
+  ALLOW
+  WARN_ONLY
+  BLOCK_SECOND_SESSION
+}
+
+enum WebcamSnapshotMode {
+  DISABLED
+  START_ONLY
+  PERIODIC
+  EVENT_TRIGGERED
+}
+
+enum ScreenCaptureMode {
+  DISABLED
+  EVENT_TRIGGERED
+  PERIODIC
+}
+
+enum ProctoringSessionStatus {
+  NOT_STARTED
+  CONSENT_PENDING
+  CHECK_PENDING
+  READY
+  ACTIVE
+  DISCONNECTED
+  FLAGGED
+  ENDED
+  CANCELLED
+}
+
+enum ProctoringReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_REVIEW
+  CLEARED
+  NEEDS_FOLLOW_UP
+  POLICY_VIOLATION
+  INVALIDATED
+}
+
+enum ProctoringEventType {
+  CONSENT_ACCEPTED
+  CONSENT_DECLINED
+  FULLSCREEN_ENTER
+  FULLSCREEN_EXIT
+  TAB_HIDDEN
+  TAB_VISIBLE
+  WINDOW_BLUR
+  WINDOW_FOCUS
+  COPY
+  PASTE
+  CONTEXT_MENU
+  FORBIDDEN_SHORTCUT
+  NETWORK_DISCONNECT
+  NETWORK_RECONNECT
+  SECOND_SESSION_ATTEMPT
+  WEBCAM_PERMISSION_GRANTED
+  WEBCAM_PERMISSION_DENIED
+  MICROPHONE_PERMISSION_GRANTED
+  MICROPHONE_PERMISSION_DENIED
+  SCREEN_SHARE_STARTED
+  SCREEN_SHARE_STOPPED
+  CAMERA_SNAPSHOT_CAPTURED
+  SCREEN_CAPTURED
+  IDENTITY_CHECK_STARTED
+  IDENTITY_CHECK_COMPLETED
+  IDENTITY_CHECK_FAILED
+  ENVIRONMENT_CHECK_COMPLETED
+  PROCTOR_WARNING
+  PROCTOR_NOTE
+  MANUAL_FLAG
+  MANUAL_CLEAR
+  AUTO_SUBMIT_TRIGGERED
+}
+
+enum ProctoringEvidenceType {
+  ID_DOCUMENT
+  SELFIE
+  CAMERA_SNAPSHOT
+  SCREEN_CAPTURE
+  ENVIRONMENT_IMAGE
+  PROCTOR_NOTE_ATTACHMENT
+}
+
+enum IdentityCheckStatus {
+  NOT_REQUIRED
+  PENDING
+  SUBMITTED
+  VERIFIED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+enum EnvironmentCheckStatus {
+  NOT_REQUIRED
+  PENDING
+  SUBMITTED
+  VERIFIED
+  REJECTED
+  NEEDS_REVIEW
 }
 
 enum AnalyticsJobStatus {
@@ -1990,6 +2105,367 @@ model ExportAudit {
   @@index([reportFileId])
   @@index([reportJobId])
   @@index([createdAt])
+}
+
+model ProctoringPolicy {
+  id                                String                @id @default(cuid())
+  collegeId                         String?
+  assessmentId                      String?
+  name                              String
+  version                           Int                   @default(1)
+  active                            Boolean               @default(true)
+  isDefault                         Boolean               @default(false)
+  proctoringEnabled                 Boolean               @default(false)
+  consentRequired                   Boolean               @default(false)
+  fullscreenRequired                Boolean               @default(false)
+  fullscreenExitPolicy              FullscreenExitPolicy  @default(LOG_ONLY)
+  tabSwitchMonitoring               Boolean               @default(false)
+  copyMonitoring                    Boolean               @default(false)
+  pasteMonitoring                   Boolean               @default(false)
+  contextMenuMonitoring             Boolean               @default(false)
+  keyboardShortcutMonitoring        Boolean               @default(false)
+  multipleSessionPolicy             MultipleSessionPolicy @default(WARN_ONLY)
+  webcamRequired                    Boolean               @default(false)
+  webcamSnapshotMode                WebcamSnapshotMode    @default(DISABLED)
+  webcamSnapshotIntervalSeconds     Int?
+  microphoneRequired                Boolean               @default(false)
+  microphoneCheckOnly               Boolean               @default(true)
+  screenShareRequired               Boolean               @default(false)
+  screenCaptureMode                 ScreenCaptureMode     @default(DISABLED)
+  screenCaptureIntervalSeconds      Int?
+  identityCheckRequired             Boolean               @default(false)
+  environmentCheckRequired          Boolean               @default(false)
+  networkDisconnectThresholdSeconds Int                   @default(60)
+  warningThreshold                  Int                   @default(3)
+  flagThreshold                     Int                   @default(5)
+  autoSubmitOnCriticalViolation     Boolean               @default(false)
+  allowManualOverride               Boolean               @default(true)
+  evidenceRetentionDays             Int                   @default(30)
+  studentReviewVisibility           Boolean               @default(true)
+  proctorInstructions               String?
+  institutionPrivacyNotice          String?
+  emergencySupportContact           String?
+  riskWeights                       Json?
+  metadata                          Json?
+  createdById                       String?
+  updatedById                       String?
+  createdAt                         DateTime              @default(now())
+  updatedAt                         DateTime              @updatedAt
+
+  @@index([collegeId])
+  @@index([assessmentId])
+  @@index([active])
+  @@index([isDefault])
+}
+
+model ProctoringSession {
+  id                    String                  @id @default(cuid())
+  collegeId             String
+  assessmentId          String
+  attemptId             String                  @unique
+  studentId             String
+  status                ProctoringSessionStatus @default(NOT_STARTED)
+  policyId              String?
+  policySnapshot        Json
+  consentAcceptedAt     DateTime?
+  consentVersion        String?
+  startedAt             DateTime?
+  endedAt               DateTime?
+  lastHeartbeatAt       DateTime?
+  disconnectStartedAt   DateTime?
+  warningCount          Int                     @default(0)
+  flagCount             Int                     @default(0)
+  riskScore             Int                     @default(0)
+  riskLevel             String                  @default("LOW")
+  riskContributors      Json?
+  reviewStatus          ProctoringReviewStatus  @default(NOT_REQUIRED)
+  reviewedById          String?
+  reviewedAt            DateTime?
+  sessionChallengeHash  String?
+  sessionChallengeUntil DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@index([collegeId])
+  @@index([assessmentId])
+  @@index([studentId])
+  @@index([status])
+  @@index([reviewStatus])
+  @@index([lastHeartbeatAt])
+}
+
+model ProctoringEvent {
+  id              String              @id @default(cuid())
+  collegeId       String
+  sessionId       String
+  attemptId       String
+  studentId       String
+  eventType       ProctoringEventType
+  severity        String              @default("INFO")
+  sequenceNumber  Int
+  idempotencyKey  String
+  clientTimestamp DateTime?
+  serverTimestamp DateTime            @default(now())
+  metadata        Json?
+  riskDelta       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([attemptId])
+  @@index([studentId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model ProctoringWarning {
+  id             String    @id @default(cuid())
+  collegeId      String
+  sessionId      String
+  attemptId      String
+  warningType    String
+  message        String
+  acknowledgedAt DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([attemptId])
+  @@index([createdAt])
+}
+
+model ProctoringEvidence {
+  id                String                 @id @default(cuid())
+  collegeId         String
+  sessionId         String
+  attemptId         String
+  studentId         String
+  evidenceType      ProctoringEvidenceType
+  fileName          String
+  mimeType          String
+  sizeBytes         Int
+  storageKey        String                 @unique
+  checksum          String?
+  capturedAt        DateTime?
+  expiresAt         DateTime
+  legalHold         Boolean                @default(false)
+  malwareScanStatus String                 @default("PENDING")
+  metadata          Json?
+  createdById       String?
+  createdAt         DateTime               @default(now())
+
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([attemptId])
+  @@index([studentId])
+  @@index([evidenceType])
+  @@index([expiresAt])
+  @@index([legalHold])
+}
+
+model EvidenceAccessAudit {
+  id         String   @id @default(cuid())
+  collegeId  String
+  evidenceId String
+  userId     String
+  action     String
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([collegeId])
+  @@index([evidenceId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model IdentityCheck {
+  id           String              @id @default(cuid())
+  collegeId    String
+  sessionId    String
+  attemptId    String
+  studentId    String
+  status       IdentityCheckStatus @default(NOT_REQUIRED)
+  submittedAt  DateTime?
+  reviewedById String?
+  reviewedAt   DateTime?
+  notes        String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([status])
+}
+
+model EnvironmentCheck {
+  id           String                 @id @default(cuid())
+  collegeId    String
+  sessionId    String
+  attemptId    String
+  studentId    String
+  status       EnvironmentCheckStatus @default(NOT_REQUIRED)
+  checklist    Json?
+  submittedAt  DateTime?
+  reviewedById String?
+  reviewedAt   DateTime?
+  notes        String?
+  metadata     Json?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([status])
+}
+
+model DeviceSession {
+  id             String    @id @default(cuid())
+  collegeId      String
+  sessionId      String
+  attemptId      String
+  studentId      String
+  deviceHash     String
+  userAgentHash  String?
+  status         String    @default("ACTIVE")
+  challengeHash  String?
+  challengeUntil DateTime?
+  firstSeenAt    DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  revokedAt      DateTime?
+  metadata       Json?
+
+  @@unique([attemptId, deviceHash])
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([status])
+}
+
+model SessionHeartbeat {
+  id                String    @id @default(cuid())
+  collegeId         String
+  sessionId         String
+  attemptId         String
+  sequenceNumber    Int
+  clientTimestamp   DateTime?
+  connectivityState String
+  cameraState       String?
+  microphoneState   String?
+  screenShareState  String?
+  fullscreenState   String?
+  currentQuestionId String?
+  createdAt         DateTime  @default(now())
+
+  @@unique([sessionId, sequenceNumber])
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([attemptId])
+  @@index([createdAt])
+}
+
+model ProctoringReview {
+  id                     String                 @id @default(cuid())
+  collegeId              String
+  sessionId              String                 @unique
+  assessmentId           String
+  attemptId              String
+  studentId              String
+  status                 ProctoringReviewStatus @default(PENDING)
+  assignedReviewerId     String?
+  decisionReason         String?
+  appealStatus           String?
+  secondReviewerRequired Boolean                @default(false)
+  resultHeld             Boolean                @default(false)
+  resultHoldReason       String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  @@index([collegeId])
+  @@index([assessmentId])
+  @@index([studentId])
+  @@index([status])
+  @@index([assignedReviewerId])
+}
+
+model ProctoringReviewDecision {
+  id         String                 @id @default(cuid())
+  collegeId  String
+  reviewId   String
+  sessionId  String
+  reviewerId String
+  decision   ProctoringReviewStatus
+  reason     String
+  metadata   Json?
+  createdAt  DateTime               @default(now())
+
+  @@index([collegeId])
+  @@index([reviewId])
+  @@index([sessionId])
+  @@index([reviewerId])
+}
+
+model ProctoringOverride {
+  id           String   @id @default(cuid())
+  collegeId    String
+  sessionId    String
+  overrideType String
+  reason       String
+  createdById  String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([createdById])
+}
+
+model ProctoringRetentionJob {
+  id           String             @id @default(cuid())
+  collegeId    String
+  status       AnalyticsJobStatus @default(QUEUED)
+  cutoffAt     DateTime
+  deletedCount Int                @default(0)
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([collegeId])
+  @@index([status])
+  @@index([cutoffAt])
+}
+
+model LiveProctorAssignment {
+  id           String   @id @default(cuid())
+  collegeId    String
+  assessmentId String
+  proctorId    String
+  active       Boolean  @default(true)
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  @@unique([assessmentId, proctorId])
+  @@index([collegeId])
+  @@index([proctorId])
+  @@index([active])
+}
+
+model LiveProctorNote {
+  id         String   @id @default(cuid())
+  collegeId  String
+  sessionId  String
+  proctorId  String
+  note       String
+  visibility String   @default("INTERNAL")
+  createdAt  DateTime @default(now())
+
+  @@index([collegeId])
+  @@index([sessionId])
+  @@index([proctorId])
 }
 
 model AiGenerationRequest {
