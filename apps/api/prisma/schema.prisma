@@ -259,14 +259,93 @@ enum PasswordResetStatus {
 
 enum CodeExecutionStatus {
   PENDING
+  QUEUED
   RUNNING
   ACCEPTED
+  PARTIALLY_ACCEPTED
   WRONG_ANSWER
   COMPILATION_ERROR
   RUNTIME_ERROR
   TIME_LIMIT_EXCEEDED
   MEMORY_LIMIT_EXCEEDED
+  OUTPUT_LIMIT_EXCEEDED
   INTERNAL_ERROR
+  CANCELLED
+}
+
+enum RunnerMode {
+  DISABLED
+  MOCK
+  DOCKER_ISOLATED
+  REMOTE_RUNNER
+}
+
+enum CodingSubmissionStatus {
+  DRAFT
+  QUEUED
+  COMPILING
+  RUNNING
+  ACCEPTED
+  PARTIALLY_ACCEPTED
+  WRONG_ANSWER
+  COMPILATION_ERROR
+  RUNTIME_ERROR
+  TIME_LIMIT_EXCEEDED
+  MEMORY_LIMIT_EXCEEDED
+  OUTPUT_LIMIT_EXCEEDED
+  INTERNAL_ERROR
+  CANCELLED
+}
+
+enum CheckerType {
+  EXACT
+  TRIMMED
+  TOKEN
+  FLOAT_TOLERANCE
+  SPECIAL_JUDGE
+}
+
+enum PartialScoringPolicy {
+  EQUAL_PER_TEST
+  WEIGHTED_PER_TEST
+  ALL_OR_NOTHING
+  GROUP_BASED
+}
+
+enum CodingReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_REVIEW
+  HELD
+  RELEASED
+  OVERRIDDEN
+  INVALIDATED
+  RESTORED
+}
+
+enum RunnerJobStatus {
+  QUEUED
+  DISPATCHED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  STALE
+}
+
+enum PlagiarismJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PlagiarismReviewStatus {
+  UNREVIEWED
+  CLEARED
+  SUSPICIOUS
+  CONFIRMED
 }
 
 enum CollegeStatus {
@@ -1059,38 +1138,353 @@ model QuestionTag {
 }
 
 model CodingQuestion {
-  id               String     @id @default(cuid())
-  questionId       String     @unique
-  question         Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  problemStatement String
-  inputFormat      String?
-  outputFormat     String?
-  constraints      String?
-  examples         Json?
-  timeLimitMs      Int
-  memoryLimitMb    Int
-  allowedLanguages String[]
-  starterCode      Json?
-  testCases        TestCase[]
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id                        String               @id @default(cuid())
+  questionId                String               @unique
+  question                  Question             @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  problemStatement          String
+  inputFormat               String?
+  outputFormat              String?
+  constraints               String?
+  examples                  Json?
+  timeLimitMs               Int
+  memoryLimitMb             Int
+  processLimit              Int                  @default(64)
+  outputLimitBytes          Int                  @default(65536)
+  allowedLanguages          String[]
+  starterCode               Json?
+  starterCodeByLanguage     Json?
+  referenceSolutionMetadata Json?
+  expectedComplexity        String?
+  evaluationNotes           String?
+  checkerType               CheckerType          @default(TRIMMED)
+  floatTolerance            Float?
+  scoringPolicy             PartialScoringPolicy @default(WEIGHTED_PER_TEST)
+  compilationProfile        Json?
+  specialJudgeKey           String?
+  testCases                 TestCase[]
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
 }
 
 model TestCase {
-  id               String             @id @default(cuid())
-  codingQuestionId String
-  codingQuestion   CodingQuestion     @relation(fields: [codingQuestionId], references: [id], onDelete: Cascade)
-  input            String
-  expectedOutput   String
-  visibility       TestCaseVisibility @default(PUBLIC)
-  scoreWeight      Float              @default(1)
-  displayOrder     Int
-  isActive         Boolean            @default(true)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id                String             @id @default(cuid())
+  codingQuestionId  String
+  codingQuestion    CodingQuestion     @relation(fields: [codingQuestionId], references: [id], onDelete: Cascade)
+  input             String
+  expectedOutput    String
+  visibility        TestCaseVisibility @default(PUBLIC)
+  scoreWeight       Float              @default(1)
+  groupName         String?
+  scorePoints       Float?
+  sampleExplanation String?
+  displayOrder      Int
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([codingQuestionId])
   @@index([visibility])
+}
+
+model ProgrammingLanguage {
+  id                             String   @id
+  displayName                    String
+  version                        String
+  sourceExtension                String
+  compilerCommandTemplate        String?
+  runCommandTemplate             String
+  imageIdentifier                String
+  defaultTimeLimitMs             Int
+  defaultMemoryLimitMb           Int
+  defaultProcessLimit            Int      @default(64)
+  defaultOutputLimitBytes        Int      @default(65536)
+  enabled                        Boolean  @default(true)
+  compileRequired                Boolean  @default(false)
+  starterCode                    String?
+  forbiddenConfigurationPatterns String[]
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  @@index([enabled])
+}
+
+model CodingSubmission {
+  id                      String                 @id @default(cuid())
+  collegeId               String
+  assessmentId            String
+  attemptId               String
+  attemptQuestionId       String
+  studentId               String
+  languageId              String
+  sourceCode              String
+  sourceHash              String
+  status                  CodingSubmissionStatus @default(DRAFT)
+  submittedAt             DateTime?
+  evaluatedAt             DateTime?
+  score                   Float                  @default(0)
+  maxScore                Float                  @default(0)
+  publicTestsPassed       Int                    @default(0)
+  hiddenTestsPassed       Int                    @default(0)
+  totalTests              Int                    @default(0)
+  executionTimeMs         Int?
+  peakMemoryKb            Int?
+  compilerOutputSanitized String?
+  latestExecutionId       String?
+  reviewStatus            CodingReviewStatus     @default(NOT_REQUIRED)
+  heldAt                  DateTime?
+  heldById                String?
+  holdReason              String?
+  scoreOverrideReason     String?
+  invalidatedAt           DateTime?
+  invalidatedById         String?
+  invalidationReason      String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  @@index([collegeId])
+  @@index([assessmentId])
+  @@index([attemptId])
+  @@index([studentId])
+  @@index([languageId])
+  @@index([status])
+  @@index([sourceHash])
+}
+
+model CodingExecution {
+  id                      String                 @id @default(cuid())
+  collegeId               String
+  submissionId            String
+  runnerJobId             String?
+  mode                    RunnerMode
+  status                  CodingSubmissionStatus @default(QUEUED)
+  phase                   String                 @default("queued")
+  languageId              String
+  imageIdentifier         String?
+  imageDigest             String?
+  compileStartedAt        DateTime?
+  compileFinishedAt       DateTime?
+  runStartedAt            DateTime?
+  runFinishedAt           DateTime?
+  executionTimeMs         Int?
+  peakMemoryKb            Int?
+  exitCode                Int?
+  stdoutSanitized         String?
+  stderrSanitized         String?
+  compilerOutputSanitized String?
+  mockResult              Boolean                @default(false)
+  auditMetadata           Json?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  @@index([collegeId])
+  @@index([submissionId])
+  @@index([runnerJobId])
+  @@index([status])
+}
+
+model CodingExecutionTestResult {
+  id                    String                 @id @default(cuid())
+  collegeId             String
+  executionId           String
+  submissionId          String
+  testCaseId            String?
+  visibility            TestCaseVisibility
+  displayOrder          Int
+  status                CodingSubmissionStatus
+  score                 Float                  @default(0)
+  maxScore              Float                  @default(0)
+  executionTimeMs       Int?
+  peakMemoryKb          Int?
+  outputSanitized       String?
+  errorSanitized        String?
+  checkerType           CheckerType
+  hiddenDetailsRedacted Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+
+  @@index([collegeId])
+  @@index([executionId])
+  @@index([submissionId])
+  @@index([visibility])
+}
+
+model CodingSubmissionRevision {
+  id             String   @id @default(cuid())
+  collegeId      String
+  submissionId   String
+  revisionNumber Int
+  sourceCode     String
+  sourceHash     String
+  languageId     String
+  changeType     String
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@unique([submissionId, revisionNumber])
+  @@index([collegeId])
+  @@index([submissionId])
+}
+
+model CodingEvaluation {
+  id           String                 @id @default(cuid())
+  collegeId    String
+  submissionId String
+  executionId  String?
+  version      Int
+  status       CodingSubmissionStatus
+  score        Float                  @default(0)
+  maxScore     Float                  @default(0)
+  policy       PartialScoringPolicy
+  breakdown    Json
+  createdById  String?
+  reason       String?
+  createdAt    DateTime               @default(now())
+
+  @@unique([submissionId, version])
+  @@index([collegeId])
+  @@index([submissionId])
+}
+
+model CodingReviewTask {
+  id           String             @id @default(cuid())
+  collegeId    String
+  submissionId String
+  assessmentId String
+  attemptId    String
+  studentId    String
+  assignedToId String?
+  status       CodingReviewStatus @default(PENDING)
+  reason       String
+  notes        String?
+  createdById  String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([collegeId])
+  @@index([submissionId])
+  @@index([assessmentId])
+  @@index([status])
+}
+
+model RunnerJob {
+  id             String          @id @default(cuid())
+  collegeId      String?
+  submissionId   String?
+  executionId    String?
+  queueName      String
+  mode           RunnerMode
+  status         RunnerJobStatus @default(QUEUED)
+  idempotencyKey String          @unique
+  attempts       Int             @default(0)
+  priority       Int             @default(0)
+  timeoutMs      Int
+  queuedAt       DateTime        @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  errorCode      String?
+  errorMessage   String?
+  metadata       Json?
+
+  @@index([collegeId])
+  @@index([submissionId])
+  @@index([status])
+  @@index([queueName])
+}
+
+model RunnerFailure {
+  id               String     @id @default(cuid())
+  collegeId        String?
+  runnerJobId      String?
+  mode             RunnerMode
+  failureType      String
+  messageSanitized String
+  retryable        Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+
+  @@index([collegeId])
+  @@index([runnerJobId])
+  @@index([failureType])
+}
+
+model RunnerImageVersion {
+  id              String   @id @default(cuid())
+  languageId      String
+  imageIdentifier String
+  imageDigest     String?
+  active          Boolean  @default(false)
+  deprecated      Boolean  @default(false)
+  immutableTag    Boolean  @default(true)
+  usageCount      Int      @default(0)
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([languageId])
+  @@index([active])
+}
+
+model CodingPlagiarismJob {
+  id             String              @id @default(cuid())
+  collegeId      String
+  assessmentId   String?
+  requestedById  String
+  status         PlagiarismJobStatus @default(QUEUED)
+  minSourceBytes Int                 @default(120)
+  comparedCount  Int                 @default(0)
+  matchCount     Int                 @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([collegeId])
+  @@index([assessmentId])
+  @@index([status])
+}
+
+model CodingSimilarityMatch {
+  id                   String                 @id @default(cuid())
+  collegeId            String
+  jobId                String
+  assessmentId         String?
+  submissionAId        String
+  submissionBId        String
+  languageId           String
+  exactHashMatch       Boolean                @default(false)
+  similarityScore      Float
+  tokenSimilarity      Float
+  normalizedSimilarity Float
+  matchedRegions       Json?
+  starterIgnored       Boolean                @default(true)
+  reviewStatus         PlagiarismReviewStatus @default(UNREVIEWED)
+  reviewerId           String?
+  reviewerReason       String?
+  reviewedAt           DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([collegeId])
+  @@index([jobId])
+  @@index([assessmentId])
+  @@index([reviewStatus])
+}
+
+model CodingAuditEvent {
+  id           String   @id @default(cuid())
+  collegeId    String
+  submissionId String?
+  runnerJobId  String?
+  actorId      String?
+  actorRole    Role?
+  eventType    String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([collegeId])
+  @@index([submissionId])
+  @@index([runnerJobId])
+  @@index([eventType])
 }
 
 model QuestionAttachment {

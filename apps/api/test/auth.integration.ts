@@ -4,6 +4,7 @@ import { Server } from "node:http";
 import { AddressInfo } from "node:net";
 import { AppModule } from "../src/modules/app.module";
 import { createCookieParser } from "../src/modules/http/cookie-parser";
+import { validateEnvironment } from "../src/modules/config/environment";
 import { securityHeaders } from "../src/modules/http/security-headers";
 import { PrismaService } from "../src/modules/prisma/prisma.service";
 import { RedisService } from "../src/modules/redis/redis.service";
@@ -61,6 +62,8 @@ const accounts = [
 ] as const;
 
 async function main(): Promise<void> {
+  process.env.CODE_RUNNER_MODE = "MOCK";
+  validateEnvironment();
   const app = await NestFactory.create(AppModule, { logger: ["error"] });
   app.use(createCookieParser());
   app.use(securityHeaders());
@@ -247,6 +250,13 @@ async function main(): Promise<void> {
       studentSession,
     );
     await runProctoringTests(
+      baseUrl,
+      app.get(PrismaService),
+      adminSession,
+      mustGet(sessions, "FACULTY"),
+      studentSession,
+    );
+    await runCodingJudgeTests(
       baseUrl,
       app.get(PrismaService),
       adminSession,
@@ -1758,19 +1768,24 @@ async function runProductionHardeningTests(
     403,
     "student cannot create storage upload",
   );
-  await expectStatus(
-    postJsonWithCookie(
-      baseUrl,
-      "/api/v1/code-runner/jobs",
-      studentSession.cookie,
-      {
-        language: "javascript",
-        sourceCode: "console.log(1)",
-      },
-    ),
-    503,
-    "API refuses direct code execution when runner disabled",
-  );
+  validateEnvironment({ ...process.env, CODE_RUNNER_MODE: "DISABLED" });
+  try {
+    await expectStatus(
+      postJsonWithCookie(
+        baseUrl,
+        "/api/v1/code-runner/jobs",
+        studentSession.cookie,
+        {
+          language: "javascript",
+          sourceCode: "console.log(1)",
+        },
+      ),
+      503,
+      "API refuses direct code execution when runner disabled",
+    );
+  } finally {
+    validateEnvironment({ ...process.env, CODE_RUNNER_MODE: "MOCK" });
+  }
 }
 
 async function runAiWorkflowTests(
@@ -2555,6 +2570,136 @@ async function runProctoringTests(
     201,
     "proctoring retention job",
   );
+}
+
+async function runCodingJudgeTests(
+  baseUrl: string,
+  prisma: PrismaService,
+  adminSession: TestSession,
+  facultySession: TestSession,
+  studentSession: TestSession,
+): Promise<void> {
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/code-runner/health`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "code runner health",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/code-runner/languages`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "code runner language registry",
+  );
+  const assessment = await prisma.assessment.findUniqueOrThrow({ where: { id: "seed-assessment-active-phase7" } });
+  const question = await prisma.question.findUniqueOrThrow({ where: { id: "seed-q-coding" } });
+  const attempt = await prisma.testAttempt.create({
+    data: {
+      collegeId: assessment.collegeId ?? studentSession.body.user.collegeId ?? "",
+      assessmentId: assessment.id,
+      studentId: studentSession.body.user.id,
+      attemptNumber: 7000 + Math.floor(Math.random() * 1000),
+      startedAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      idempotencyKey: `phase16-${Date.now().toString()}`,
+    },
+  });
+  const attemptQuestion = await prisma.attemptQuestion.create({
+    data: {
+      attemptId: attempt.id,
+      originalQuestionId: question.id,
+      displayOrder: 1,
+      questionType: "CODING",
+      questionTextSnapshot: question.questionText ?? question.prompt ?? "Coding question",
+      assignedMarks: question.defaultMarks,
+    },
+  });
+
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      `/api/v1/student/attempts/${attempt.id}/coding/${attemptQuestion.id}/run`,
+      studentSession.cookie,
+      { languageId: "brainfuck", sourceCode: "print('x')" },
+    ),
+    400,
+    "unsupported language rejected",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      `/api/v1/student/attempts/${attempt.id}/coding/${attemptQuestion.id}/run`,
+      studentSession.cookie,
+      { languageId: "python", sourceCode: "x".repeat(70000) },
+    ),
+    400,
+    "source size limit enforced",
+  );
+  const runResponse = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/attempts/${attempt.id}/coding/${attemptQuestion.id}/run`,
+    studentSession.cookie,
+    "POST",
+    { languageId: "python", sourceCode: "print('MOCK_ACCEPTED')" },
+    201,
+    "run public coding sample",
+  );
+  assertEqual(runResponse.mockResult, true, "run uses labelled mock mode");
+  await getObject(baseUrl, `/api/v1/coding/jobs/${String(runResponse.jobId)}`, studentSession.cookie);
+  const submitResponse = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/student/attempts/${attempt.id}/coding/${attemptQuestion.id}/submit`,
+    studentSession.cookie,
+    "POST",
+    { languageId: "python", sourceCode: "print('MOCK_ACCEPTED')" },
+    201,
+    "submit coding solution",
+  );
+  const history = await getObject(baseUrl, `/api/v1/student/coding-submissions/${String(submitResponse.submissionId)}`, studentSession.cookie);
+  const serialized = JSON.stringify(history);
+  assert(!serialized.includes("-2 8"), "hidden test input is not returned to student");
+  assert(!serialized.includes("expectedOutput"), "hidden expected output is not returned to student");
+  await getObject(baseUrl, `/api/v1/coding/submissions/${String(submitResponse.submissionId)}`, facultySession.cookie);
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/coding/submissions/${String(submitResponse.submissionId)}/rejudge`,
+    facultySession.cookie,
+    "POST",
+    { reason: "Integration rejudge." },
+    201,
+    "coding rejudge",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/coding/submissions/${String(submitResponse.submissionId)}/hold`,
+    adminSession.cookie,
+    "POST",
+    { reason: "Integration hold." },
+    201,
+    "coding hold",
+  );
+  await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/coding/submissions/${String(submitResponse.submissionId)}/score`,
+    adminSession.cookie,
+    "PATCH",
+    { score: 8, reason: "Integration score override." },
+    200,
+    "coding score override audit",
+  );
+  const plagiarismJob = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/coding/plagiarism/jobs",
+    facultySession.cookie,
+    "POST",
+    { assessmentId: assessment.id },
+    201,
+    "plagiarism job",
+  );
+  await getObject(baseUrl, `/api/v1/coding/plagiarism/jobs/${String(plagiarismJob.id)}`, facultySession.cookie);
+  await getObject(baseUrl, "/api/v1/analytics/coding", adminSession.cookie);
 }
 
 async function pollJob(

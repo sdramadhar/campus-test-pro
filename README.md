@@ -338,6 +338,56 @@ Document import accepts TXT, Markdown, CSV, text PDF, DOCX, XLSX, PNG, and JPG p
 
 Coding questions store test cases and hidden-case metadata, but CampusTest Pro does not execute untrusted code yet. Browser exam events are review signals only; they do not automatically declare misconduct.
 
+## Phase 16 Secure Coding Judge
+
+Phase 16 adds a secure coding-judge foundation with database-backed programming languages, runner image metadata, coding submissions, executions, per-test results, revisions, evaluations, review tasks, runner jobs/failures, plagiarism jobs, similarity matches, and coding audit events.
+
+Coding routes include:
+
+- `POST /api/v1/student/attempts/:attemptId/coding/:attemptQuestionId/run`
+- `POST /api/v1/student/attempts/:attemptId/coding/:attemptQuestionId/submit`
+- `GET /api/v1/student/coding-submissions`
+- `GET /api/v1/student/coding-submissions/:submissionId`
+- `GET /api/v1/coding/jobs/:jobId`
+- `POST /api/v1/coding/jobs/:jobId/cancel`
+- `GET /api/v1/coding/submissions`
+- `GET /api/v1/coding/submissions/:submissionId`
+- `POST /api/v1/coding/submissions/:submissionId/rejudge`
+- `POST /api/v1/coding/submissions/:submissionId/hold`
+- `POST /api/v1/coding/submissions/:submissionId/release`
+- `PATCH /api/v1/coding/submissions/:submissionId/score`
+- `POST /api/v1/assessments/:assessmentId/coding/rejudge`
+- `POST|GET /api/v1/coding/plagiarism/jobs`
+- `GET /api/v1/coding/plagiarism/jobs/:jobId`
+- `GET /api/v1/coding/plagiarism/matches/:matchId`
+- `PATCH /api/v1/coding/plagiarism/matches/:matchId/review`
+- `GET /api/v1/analytics/coding`
+- `GET /api/v1/assessments/:assessmentId/coding-analytics`
+- `GET /api/v1/questions/:questionId/coding-analytics`
+- `GET /api/v1/code-runner/health`
+- `GET /api/v1/code-runner/languages`
+- `GET /api/v1/code-runner/images`
+
+Frontend routes include:
+
+- `/student/coding-submissions`
+- `/student/coding-submissions/[submissionId]`
+- `/student/attempts/[attemptId]/coding/[attemptQuestionId]`
+- `/coding/reviews`
+- `/coding/reviews/[submissionId]`
+- `/assessments/[assessmentId]/coding-submissions`
+- `/coding/plagiarism`
+- `/coding/plagiarism/jobs/[jobId]`
+- `/coding/plagiarism/matches/[matchId]`
+- `/system/code-runner`
+- `/admin/code-runner/languages`
+- `/admin/code-runner/images`
+- `/analytics/coding`
+- `/assessments/[assessmentId]/coding-analytics`
+- `/questions/[questionId]/coding-analytics`
+
+Local development uses `CODE_RUNNER_MODE=MOCK`; the mock gateway never compiles or executes untrusted code. Production must use a separately hardened isolated runner service. See `docs/CODE_RUNNER_SECURITY.md`, `docs/CODE_RUNNER_OPERATIONS.md`, `docs/CODE_RUNNER_THREAT_MODEL.md`, `docs/CODE_RUNNER_LOCAL_SETUP.md`, `docs/CODING_ASSESSMENTS.md`, and `docs/CODING_PLAGIARISM.md`.
+
 ## Verification Commands
 
 - `npm run db:generate`
@@ -359,6 +409,7 @@ Worker:
 - API health: http://localhost:4000/health
 - API readiness: http://localhost:4000/ready
 - Swagger: http://localhost:4000/api/docs
+- Local mock code-runner gateway: http://localhost:4100/health
 
 ## Phase 15 Secure Exam Monitoring
 

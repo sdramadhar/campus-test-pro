@@ -77,3 +77,25 @@ Phase 15 adds:
 - `LiveProctorNote`
 
 Records are college-scoped and indexed by tenant, assessment, student, session, status, and timestamps. Evidence stores private storage keys and safe metadata; student-facing APIs return safe evidence views rather than raw storage references.
+
+# Phase 16 Coding Judge Data
+
+Phase 16 adds:
+
+- `ProgrammingLanguage`
+- `RunnerImageVersion`
+- `RunnerJob`
+- `RunnerFailure`
+- `CodingSubmission`
+- `CodingSubmissionRevision`
+- `CodingExecution`
+- `CodingExecutionTestResult`
+- `CodingEvaluation`
+- `CodingReviewTask`
+- `CodingPlagiarismJob`
+- `CodingSimilarityMatch`
+- `CodingAuditEvent`
+
+`CodingQuestion` is extended with runner limits, checker metadata, partial-scoring policy, per-language starter code, reference-solution metadata, and expected complexity. `TestCase` is extended with group, score, and sample-explanation metadata.
+
+Hidden tests remain in PostgreSQL and are not returned by student-facing APIs. Runner jobs and plagiarism records are tenant-scoped and indexed by college, assessment, question, status, and timestamps.

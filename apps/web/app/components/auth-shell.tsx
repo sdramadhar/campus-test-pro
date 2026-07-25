@@ -275,6 +275,24 @@ const navItems: Array<{
   },
   {
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/coding/reviews",
+    label: "Coding Reviews",
+    icon: "questions",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/coding/plagiarism",
+    label: "Plagiarism Review",
+    icon: "audit",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/analytics/coding",
+    label: "Coding Analytics",
+    icon: "operations",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
     href: "/proctor/live",
     label: "Live Proctoring",
     icon: "shield",
@@ -296,6 +314,24 @@ const navItems: Array<{
     href: "/system/queues",
     label: "Queues",
     icon: "queues",
+  },
+  {
+    roles: ["SUPER_ADMIN"],
+    href: "/system/code-runner",
+    label: "Code Runner",
+    icon: "queues",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/code-runner/languages",
+    label: "Runner Languages",
+    icon: "settings",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/code-runner/images",
+    label: "Runner Images",
+    icon: "settings",
   },
   {
     roles: ["FACULTY"],
@@ -339,6 +375,12 @@ const navItems: Array<{
     href: "/student/results",
     label: "Results",
     icon: "results",
+  },
+  {
+    roles: ["STUDENT"],
+    href: "/student/coding-submissions",
+    label: "Coding History",
+    icon: "questions",
   },
   {
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY", "STUDENT"],

@@ -49,10 +49,22 @@ export const environmentSchema = z
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     CODE_RUNNER_MODE: z
-      .enum(["disabled", "mock", "external"])
-      .default("disabled"),
+      .string()
+      .default("DISABLED")
+      .transform((value) => value.toUpperCase().replace("EXTERNAL", "REMOTE_RUNNER"))
+      .pipe(z.enum(["DISABLED", "MOCK", "DOCKER_ISOLATED", "REMOTE_RUNNER"])),
+    CODE_RUNNER_URL: z.string().optional(),
+    CODE_RUNNER_INTERNAL_TOKEN: z.string().optional(),
     CODE_RUNNER_QUEUE: z.string().default("code-execution"),
     CODE_RUNNER_INTERNAL_URL: z.string().optional(),
+    CODE_RUNNER_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+    CODE_RUNNER_MAX_SOURCE_BYTES: z.coerce.number().int().positive().default(65536),
+    CODE_RUNNER_MAX_STDIN_BYTES: z.coerce.number().int().positive().default(8192),
+    CODE_RUNNER_MAX_OUTPUT_BYTES: z.coerce.number().int().positive().default(65536),
+    CODE_RUNNER_DEFAULT_CPU_LIMIT: z.string().default("0.5"),
+    CODE_RUNNER_DEFAULT_MEMORY_MB: z.coerce.number().int().positive().default(256),
+    CODE_RUNNER_DEFAULT_PROCESS_LIMIT: z.coerce.number().int().positive().default(64),
+    CODE_RUNNER_ALLOWED_LANGUAGES: z.string().default("python,javascript,typescript,c,cpp,java,go,csharp,kotlin,rust"),
     AI_FEATURE_ENABLED: z.enum(["true", "false"]).default("true"),
     AI_PROVIDER: z
       .enum(["mock", "openai", "gemini", "anthropic", "azure-openai", "ollama"])
@@ -129,11 +141,21 @@ export const environmentSchema = z
           message: "Disable or protect Swagger in production.",
         });
       }
-      if (env.CODE_RUNNER_MODE === "mock") {
+      if (env.CODE_RUNNER_MODE === "MOCK") {
         ctx.addIssue({
           code: "custom",
           path: ["CODE_RUNNER_MODE"],
           message: "Mock code runner is not allowed in production.",
+        });
+      }
+      if (
+        env.CODE_RUNNER_MODE === "REMOTE_RUNNER" &&
+        (!env.CODE_RUNNER_URL || !env.CODE_RUNNER_INTERNAL_TOKEN)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["CODE_RUNNER_URL"],
+          message: "Remote code runner requires URL and internal token.",
         });
       }
       if (env.AI_PROVIDER === "mock") {

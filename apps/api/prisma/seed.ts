@@ -12,6 +12,9 @@ import {
   EntityStatus,
   EnvironmentCheckStatus,
   Gender,
+  CheckerType,
+  CodingReviewStatus,
+  CodingSubmissionStatus,
   FullscreenExitPolicy,
   IdentityCheckStatus,
   ModerationStatus,
@@ -23,6 +26,9 @@ import {
   ProctoringEvidenceType,
   ProctoringReviewStatus,
   ProctoringSessionStatus,
+  PartialScoringPolicy,
+  PlagiarismJobStatus,
+  PlagiarismReviewStatus,
   QuestionDifficulty,
   QuestionStatus,
   QuestionType,
@@ -30,6 +36,8 @@ import {
   ReportOutputFormat,
   ReportScheduleFrequency,
   ResultVisibility,
+  RunnerJobStatus,
+  RunnerMode,
   SecurityReviewStatus,
   InsightStatus,
   Role,
@@ -643,8 +651,16 @@ async function main(): Promise<void> {
         examples: [{ input: "2 3", output: "5" }],
         timeLimitMs: 1000,
         memoryLimitMb: 128,
-        allowedLanguages: ["javascript", "python"],
-        starterCode: { javascript: 'const fs = require("fs");' },
+        processLimit: 64,
+        outputLimitBytes: 65536,
+        allowedLanguages: ["javascript", "python", "typescript"],
+        starterCode: { javascript: 'const fs = require("fs");', python: "import sys\n" },
+        starterCodeByLanguage: { javascript: 'const fs = require("fs");', python: "import sys\n", typescript: "import fs from 'node:fs';\n" },
+        referenceSolutionMetadata: { storedOffline: true, visibleToStudents: false },
+        expectedComplexity: "O(1)",
+        evaluationNotes: "Seeded exact-sum coding problem.",
+        checkerType: CheckerType.TRIMMED,
+        scoringPolicy: PartialScoringPolicy.WEIGHTED_PER_TEST,
         testCases: {
           create: [
             {
@@ -2353,6 +2369,152 @@ async function main(): Promise<void> {
       },
     ],
   });
+
+  const languages = [
+    ["c", "C", "C17", "c", "gcc main.c -O2 -std=c17 -o main", "./main", "ghcr.io/campustest/runner-c:1.0.0", true, "int main(void) { return 0; }\n"],
+    ["cpp", "C++", "C++20", "cpp", "g++ main.cpp -O2 -std=c++20 -o main", "./main", "ghcr.io/campustest/runner-cpp:1.0.0", true, "#include <bits/stdc++.h>\nint main(){return 0;}\n"],
+    ["java", "Java", "21", "java", "javac Main.java", "java Main", "ghcr.io/campustest/runner-java:21.0.0", true, "class Main { public static void main(String[] args) {} }\n"],
+    ["python", "Python", "3.12", "py", null, "python main.py", "ghcr.io/campustest/runner-python:3.12.0", false, "def solve():\n    pass\n"],
+    ["javascript", "JavaScript", "Node 22", "js", null, "node main.js", "ghcr.io/campustest/runner-node:22.0.0", false, "function solve() {}\n"],
+    ["typescript", "TypeScript", "5.9", "ts", "tsc main.ts", "node main.js", "ghcr.io/campustest/runner-typescript:5.9.0", true, "function solve(): void {}\n"],
+    ["go", "Go", "1.23", "go", "go build -o main main.go", "./main", "ghcr.io/campustest/runner-go:1.23.0", true, "package main\nfunc main() {}\n"],
+    ["csharp", "C#", ".NET 8", "cs", "dotnet build", "dotnet run --no-build", "ghcr.io/campustest/runner-dotnet:8.0.0", true, "public class Program { public static void Main() {} }\n"],
+    ["kotlin", "Kotlin", "2.0", "kt", "kotlinc Main.kt -include-runtime -d main.jar", "java -jar main.jar", "ghcr.io/campustest/runner-kotlin:2.0.0", true, "fun main() {}\n"],
+    ["rust", "Rust", "1.82", "rs", "rustc main.rs -O -o main", "./main", "ghcr.io/campustest/runner-rust:1.82.0", true, "fn main() {}\n"],
+  ] as const;
+
+  for (const [id, displayName, version, extension, compiler, run, image, compileRequired, starter] of languages) {
+    await prisma.programmingLanguage.upsert({
+      where: { id },
+      update: {
+        displayName,
+        version,
+        sourceExtension: extension,
+        compilerCommandTemplate: compiler,
+        runCommandTemplate: run,
+        imageIdentifier: image,
+        defaultTimeLimitMs: 2000,
+        defaultMemoryLimitMb: 256,
+        enabled: true,
+        compileRequired,
+        starterCode: starter,
+        forbiddenConfigurationPatterns: ["child_process", "ProcessBuilder", "Runtime.getRuntime", "std::system", "popen("],
+      },
+      create: {
+        id,
+        displayName,
+        version,
+        sourceExtension: extension,
+        compilerCommandTemplate: compiler,
+        runCommandTemplate: run,
+        imageIdentifier: image,
+        defaultTimeLimitMs: 2000,
+        defaultMemoryLimitMb: 256,
+        enabled: true,
+        compileRequired,
+        starterCode: starter,
+        forbiddenConfigurationPatterns: ["child_process", "ProcessBuilder", "Runtime.getRuntime", "std::system", "popen("],
+      },
+    });
+    await prisma.runnerImageVersion.upsert({
+      where: { id: `seed-runner-image-${id}` },
+      update: { imageIdentifier: image, active: true, deprecated: false, immutableTag: true },
+      create: { id: `seed-runner-image-${id}`, languageId: id, imageIdentifier: image, active: true, immutableTag: true, createdById: collegeAdmin.id },
+    });
+  }
+
+  await prisma.codingAuditEvent.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingSimilarityMatch.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingPlagiarismJob.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingReviewTask.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingEvaluation.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingSubmissionRevision.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingExecutionTestResult.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingExecution.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.runnerFailure.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.runnerJob.deleteMany({ where: { collegeId: demoCollege.id } });
+  await prisma.codingSubmission.deleteMany({ where: { collegeId: demoCollege.id } });
+
+  const codingAttemptQuestion = await prisma.attemptQuestion.findFirst({
+    where: { attemptId: completedAttempt.id, originalQuestionId: "seed-q-coding" },
+  });
+  if (codingAttemptQuestion) {
+    const acceptedSource = "print('MOCK_ACCEPTED')\n";
+    const wrongSource = "print('WRONG')\n";
+    const sourceHash = (value: string) =>
+      Buffer.from(value).toString("base64url").slice(0, 32);
+    const acceptedSubmission = await prisma.codingSubmission.create({
+      data: {
+        id: "seed-coding-submission-accepted-phase16",
+        collegeId: demoCollege.id,
+        assessmentId: activeExam.id,
+        attemptId: completedAttempt.id,
+        attemptQuestionId: codingAttemptQuestion.id,
+        studentId: student.id,
+        languageId: "python",
+        sourceCode: acceptedSource,
+        sourceHash: sourceHash(acceptedSource),
+        status: CodingSubmissionStatus.ACCEPTED,
+        submittedAt: new Date("2026-07-25T10:00:00.000Z"),
+        evaluatedAt: new Date("2026-07-25T10:00:03.000Z"),
+        score: 10,
+        maxScore: 10,
+        publicTestsPassed: 1,
+        hiddenTestsPassed: 1,
+        totalTests: 2,
+        executionTimeMs: 12,
+        peakMemoryKb: 1024,
+      },
+    });
+    const wrongSubmission = await prisma.codingSubmission.create({
+      data: {
+        id: "seed-coding-submission-wrong-phase16",
+        collegeId: demoCollege.id,
+        assessmentId: activeExam.id,
+        attemptId: completedAttempt.id,
+        attemptQuestionId: codingAttemptQuestion.id,
+        studentId: student.id,
+        languageId: "python",
+        sourceCode: wrongSource,
+        sourceHash: sourceHash(wrongSource),
+        status: CodingSubmissionStatus.WRONG_ANSWER,
+        submittedAt: new Date("2026-07-25T10:05:00.000Z"),
+        evaluatedAt: new Date("2026-07-25T10:05:03.000Z"),
+        score: 0,
+        maxScore: 10,
+        publicTestsPassed: 0,
+        hiddenTestsPassed: 0,
+        totalTests: 2,
+        executionTimeMs: 10,
+        peakMemoryKb: 1024,
+      },
+    });
+    for (const submission of [acceptedSubmission, wrongSubmission]) {
+      await prisma.codingSubmissionRevision.create({
+        data: { collegeId: demoCollege.id, submissionId: submission.id, revisionNumber: 1, sourceCode: submission.sourceCode, sourceHash: submission.sourceHash, languageId: submission.languageId, changeType: "SEED", createdById: student.id },
+      });
+      const job = await prisma.runnerJob.create({
+        data: { collegeId: demoCollege.id, submissionId: submission.id, queueName: "code-execution", mode: RunnerMode.MOCK, status: RunnerJobStatus.COMPLETED, idempotencyKey: `seed-runner-job-${submission.id}`, timeoutMs: 5000, startedAt: submission.submittedAt, finishedAt: submission.evaluatedAt, metadata: { phase: 16, mock: true } },
+      });
+      const execution = await prisma.codingExecution.create({
+        data: { collegeId: demoCollege.id, submissionId: submission.id, runnerJobId: job.id, mode: RunnerMode.MOCK, status: submission.status, languageId: submission.languageId, mockResult: true, executionTimeMs: submission.executionTimeMs, peakMemoryKb: submission.peakMemoryKb, stdoutSanitized: "MOCK runner output. No code executed.", runStartedAt: submission.submittedAt, runFinishedAt: submission.evaluatedAt },
+      });
+      await prisma.codingSubmission.update({ where: { id: submission.id }, data: { latestExecutionId: execution.id } });
+      await prisma.codingEvaluation.create({
+        data: { collegeId: demoCollege.id, submissionId: submission.id, executionId: execution.id, version: 1, status: submission.status, score: submission.score, maxScore: submission.maxScore, policy: PartialScoringPolicy.WEIGHTED_PER_TEST, breakdown: { hiddenDetailsRedacted: true, publicTestsPassed: submission.publicTestsPassed, hiddenTestsPassed: submission.hiddenTestsPassed } },
+      });
+      await prisma.codingAuditEvent.create({ data: { collegeId: demoCollege.id, submissionId: submission.id, actorId: student.id, actorRole: Role.STUDENT, eventType: "SEED_CODING_SUBMISSION", metadata: { phase: 16, mock: true } } });
+    }
+    await prisma.codingReviewTask.create({
+      data: { id: "seed-coding-review-phase16", collegeId: demoCollege.id, submissionId: wrongSubmission.id, assessmentId: activeExam.id, attemptId: completedAttempt.id, studentId: student.id, status: CodingReviewStatus.PENDING, reason: "Seeded wrong-answer review.", createdById: faculty.id },
+    });
+    const plagiarismJob = await prisma.codingPlagiarismJob.create({
+      data: { id: "seed-coding-plagiarism-job-phase16", collegeId: demoCollege.id, assessmentId: activeExam.id, requestedById: faculty.id, status: PlagiarismJobStatus.COMPLETED, comparedCount: 2, matchCount: 1, startedAt: new Date("2026-07-25T10:10:00.000Z"), completedAt: new Date("2026-07-25T10:10:02.000Z") },
+    });
+    await prisma.codingSimilarityMatch.create({
+      data: { id: "seed-coding-similarity-phase16", collegeId: demoCollege.id, jobId: plagiarismJob.id, assessmentId: activeExam.id, submissionAId: acceptedSubmission.id, submissionBId: wrongSubmission.id, languageId: "python", similarityScore: 0.72, tokenSimilarity: 0.72, normalizedSimilarity: 0.72, matchedRegions: { automaticPunishment: false, hiddenSourceRedacted: true }, reviewStatus: PlagiarismReviewStatus.UNREVIEWED },
+    });
+  }
 
   console.log(`Seeded CampusTest Pro with super admin ${superAdmin.email}.`);
   console.log(`Seeded demo college admin ${collegeAdmin.email}.`);

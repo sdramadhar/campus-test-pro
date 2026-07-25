@@ -1,0 +1,24 @@
+services:
+  code-runner-gateway:
+    build:
+      context: .
+      dockerfile: apps/code-runner-gateway/Dockerfile
+    environment:
+      NODE_ENV: development
+      CODE_RUNNER_MODE: MOCK
+      CODE_RUNNER_GATEWAY_PORT: 4100
+    ports:
+      - "4100:4100"
+    networks:
+      - code-runner
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+networks:
+  code-runner:
+    driver: bridge

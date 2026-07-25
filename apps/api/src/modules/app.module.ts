@@ -8,6 +8,7 @@ import { AiWorkflowsModule } from "./ai-workflows/ai-workflows.module";
 import { AuthModule } from "./auth/auth.module";
 import { CollegesModule } from "./colleges/colleges.module";
 import { CodeRunnerModule } from "./code-runner/code-runner.module";
+import { CodingModule } from "./coding/coding.module";
 import { validateEnvironment } from "./config/environment";
 import { EmailModule } from "./email/email.module";
 import { ExamOperationsModule } from "./exam-operations/exam-operations.module";
@@ -37,6 +38,7 @@ import { SystemModule } from "./system/system.module";
     AiWorkflowsModule,
     AuthModule,
     CodeRunnerModule,
+    CodingModule,
     CollegesModule,
     EmailModule,
     ExamOperationsModule,

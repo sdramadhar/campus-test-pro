@@ -28,3 +28,11 @@ See `docs/ANALYTICS_PRIVACY.md` and `docs/REPORT_SECURITY.md` for the detailed p
 Proctoring endpoints are protected by JWT, role guards, tenant isolation, and student ownership checks. Event signals are advisory and require human review for final decisions. Evidence APIs return safe metadata views, avoid raw storage-key exposure in student-facing responses, and audit reviewer access.
 
 See `docs/PROCTORING_SECURITY.md`, `docs/PROCTORING_PRIVACY.md`, and `docs/EVIDENCE_RETENTION.md`.
+
+# Phase 16 Coding Security
+
+Coding judge orchestration is protected by JWT guards, role guards, tenant isolation, student attempt ownership checks, source/stdin size limits, and audit logging. The API and worker do not execute untrusted code. Local development uses mock-only results; production rejects mock runner mode.
+
+Student responses redact hidden test input, expected output, evaluator metadata, runner tokens, internal runner URLs, and private source code belonging to other students. Plagiarism matches are advisory and require human review.
+
+See `docs/CODE_RUNNER_SECURITY.md`, `docs/CODE_RUNNER_THREAT_MODEL.md`, `docs/CODING_ASSESSMENTS.md`, and `docs/CODING_PLAGIARISM.md`.

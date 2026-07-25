@@ -1110,6 +1110,61 @@ h1 {
   white-space: pre-wrap;
 }
 
+.coding-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.coding-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.coding-toolbar label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.coding-editor {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: Consolas, "Courier New", monospace;
+  line-height: 1.5;
+  min-height: 28rem;
+  padding: 1rem;
+  resize: vertical;
+  tab-size: 2;
+  width: 100%;
+}
+
+.coding-editor.dark {
+  background: #101820;
+  color: #f7fbff;
+}
+
+.coding-editor.light {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.coding-editor:focus,
+.coding-toolbar select:focus,
+.coding-toolbar input:focus {
+  border-color: var(--accent-strong);
+  outline: 3px solid rgba(31, 122, 104, 0.2);
+}
+
+.sr-only {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+  clip: rect(0, 0, 0, 0);
+}
+
 :root[data-theme="dark"] .login-panel,
 :root[data-theme="dark"] .panel,
 :root[data-theme="dark"] .metrics article,

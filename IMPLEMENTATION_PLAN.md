@@ -207,6 +207,18 @@
 - Add integration tests for consent, system check, event batching/idempotency, heartbeat, evidence privacy, role rejection, proctor warning/flag, review decision, evidence access audit, and retention.
 - Add proctoring, privacy, consent, security, operations, and evidence-retention documentation.
 
+## Phase 16 - Secure Coding Judge Foundation
+
+- Add database-backed programming-language, runner-image, coding-submission, execution, execution-test-result, revision, evaluation, review-task, runner-job, runner-failure, plagiarism-job, similarity-match, and coding-audit models.
+- Extend coding-question and test-case metadata with language allowlists, starter code per language, resource limits, checker type, partial-scoring policy, per-test weights, and hidden/public visibility.
+- Add a protected Coding API for student run/submit/history/detail, faculty/admin review/rejudge/hold/release/score override, runner job status/cancel, plagiarism jobs/matches, and coding analytics.
+- Add a safe code-runner gateway workspace and shared runner contract/language-registry packages.
+- Keep local runner execution mock-only and block mock mode in production. The API/worker do not execute untrusted code.
+- Add frontend routes for student coding submissions, attempt editor, coding reviews, plagiarism review, runner health/languages/images, and coding analytics.
+- Seed Demo College coding-language, runner-image, accepted/wrong-answer submission, execution, evaluation, review, plagiarism, and audit examples.
+- Add integration tests for language validation, source limits, public run, final submit, hidden-test redaction, review actions, rejudge, score override, plagiarism workflow, and analytics.
+- Add code-runner security, operations, threat-model, local-setup, coding-assessment, and plagiarism documentation.
+
 ## Verification
 
 - Install dependencies.
@@ -218,6 +230,7 @@
 - For Phase 9, also verify `/api/v1/system/version`, password reset, email development delivery, worker heartbeat, maintenance mode, and production Docker build validation where the local Docker runtime allows it.
 - For Phase 10, also verify `/admin`, `/admin/students`, `/admin/faculty`, `/admin/departments`, `/admin/subjects`, `/admin/semesters`, `/admin/batches`, `/admin/college-settings`, `/admin/permissions`, `/admin/profile`, `/admin/notifications`, `/admin/audit-logs`, `/admin/activity`, and the `/api/v1/admin-panel/*` endpoints.
 - For Phase 11, also verify `/questions/ai-generate`, `/questions/ai-jobs`, `/questions/import-document`, `/admin/ai/prompts`, `/admin/ai/usage`, `/academic/syllabi`, Swagger, and the mock-provider review workflow.
+- For Phase 16, also verify `/student/coding-submissions`, `/coding/reviews`, `/coding/plagiarism`, `/system/code-runner`, `/admin/code-runner/languages`, `/analytics/coding`, API health/readiness/Swagger, and `http://localhost:4100/health` for the local mock gateway.
 - For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.
 - For Phase 13, also verify `/questions/ai-batch`, `/assessments/ai-paper`, `/assessments/random-sets`, batch progress/cancel/retry APIs, generated paper-set APIs, model-answer APIs, prompt rollback, validation reports, question analytics, notifications, Swagger, and worker/API readiness.
 - For Phase 14, also verify `/super-admin/analytics`, `/admin/analytics`, `/faculty/analytics`, `/student/analytics`, `/analytics/compare`, `/leaderboards`, `/reports/builder`, `/reports/jobs`, `/analytics/insights`, analytics/report APIs, report download audit, leaderboard policy, AI insight review, and the predictive analytics limitations notice.

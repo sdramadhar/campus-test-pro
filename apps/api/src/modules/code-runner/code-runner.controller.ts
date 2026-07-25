@@ -44,4 +44,19 @@ export class CodeRunnerController {
   get(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.codeRunner.get(user, id);
   }
+
+  @Get("health")
+  health() {
+    return this.codeRunner.health();
+  }
+
+  @Get("languages")
+  languages() {
+    return this.codeRunner.languages();
+  }
+
+  @Get("images")
+  images() {
+    return this.codeRunner.images();
+  }
 }

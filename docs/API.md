@@ -145,3 +145,43 @@ Proctor/admin routes:
 - `POST /proctoring/retention/run`
 
 Swagger documents DTO validation, enums, and role-protected operations.
+
+# Phase 16 Coding Judge API
+
+Student coding routes:
+
+- `POST /api/v1/student/attempts/:attemptId/coding/:attemptQuestionId/run`
+- `POST /api/v1/student/attempts/:attemptId/coding/:attemptQuestionId/submit`
+- `GET /api/v1/student/coding-submissions`
+- `GET /api/v1/student/coding-submissions/:submissionId`
+
+Runner and review routes:
+
+- `GET /api/v1/coding/jobs/:jobId`
+- `POST /api/v1/coding/jobs/:jobId/cancel`
+- `GET /api/v1/coding/submissions`
+- `GET /api/v1/coding/submissions/:submissionId`
+- `POST /api/v1/coding/submissions/:submissionId/rejudge`
+- `POST /api/v1/coding/submissions/:submissionId/hold`
+- `POST /api/v1/coding/submissions/:submissionId/release`
+- `PATCH /api/v1/coding/submissions/:submissionId/score`
+- `POST /api/v1/assessments/:assessmentId/coding/rejudge`
+
+Plagiarism and analytics routes:
+
+- `POST /api/v1/coding/plagiarism/jobs`
+- `GET /api/v1/coding/plagiarism/jobs`
+- `GET /api/v1/coding/plagiarism/jobs/:jobId`
+- `GET /api/v1/coding/plagiarism/matches/:matchId`
+- `PATCH /api/v1/coding/plagiarism/matches/:matchId/review`
+- `GET /api/v1/analytics/coding`
+- `GET /api/v1/assessments/:assessmentId/coding-analytics`
+- `GET /api/v1/questions/:questionId/coding-analytics`
+
+Code-runner status routes:
+
+- `GET /api/v1/code-runner/health`
+- `GET /api/v1/code-runner/languages`
+- `GET /api/v1/code-runner/images`
+
+Student-facing responses redact hidden test inputs and expected outputs. Swagger at `/api/docs` includes DTO validation and role guards.
