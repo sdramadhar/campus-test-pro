@@ -506,3 +506,34 @@ Limitations:
 - High-concurrency capacity must be proven in staging with k6 and production-like infrastructure.
 - External email, object storage, error tracking, and code execution require real provider credentials.
 - The code-runner interface does not execute untrusted code inside the API or worker.
+
+## Phase 18 Commercial SaaS Foundation
+
+Phase 18 adds tenant lifecycle, onboarding, subscription plans, entitlements, disabled/mock billing abstraction, billing checkout/webhook foundations, usage metering, white-label branding, custom-domain verification, support tickets, announcements, mobile API conventions, PWA installability, tenant export/cancellation foundations, legal document versioning, and super-admin SaaS operations.
+
+Key routes:
+
+- `/pricing`
+- `/signup/institution`
+- `/onboarding`
+- `/settings/subscription`
+- `/settings/branding`
+- `/settings/domains`
+- `/settings/data-export`
+- `/settings/legal`
+- `/billing/plans`
+- `/billing/invoices`
+- `/support`
+- `/super-admin/saas`
+- `/super-admin/tenants`
+- `/status`
+
+Important limitations:
+
+- Local billing is disabled/mock only and never charges money.
+- Stripe/Razorpay require real provider credentials and adapter completion before paid billing.
+- Custom domains require DNS and managed TLS configuration.
+- PWA offline mode is limited to a safe app shell; offline high-stakes exams are not supported.
+- The mobile app is a foundation only.
+- Legal templates require professional legal review.
+- No production launch or compliance certification is claimed.

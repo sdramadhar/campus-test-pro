@@ -185,3 +185,40 @@ Code-runner status routes:
 - `GET /api/v1/code-runner/images`
 
 Student-facing responses redact hidden test inputs and expected outputs. Swagger at `/api/docs` includes DTO validation and role guards.
+# Phase 18 SaaS APIs
+
+Commercial SaaS foundation endpoints include:
+
+- `GET /api/v1/billing/plans`
+- `GET /api/v1/billing/plans/:id`
+- `POST /api/v1/tenants/signup`
+- `GET /api/v1/onboarding`
+- `POST /api/v1/onboarding/steps`
+- `GET /api/v1/billing/subscription`
+- `POST /api/v1/billing/subscription/checkout`
+- `POST /api/v1/billing/subscription/change`
+- `POST /api/v1/billing/subscription/cancel`
+- `POST /api/v1/billing/subscription/reactivate`
+- `POST /api/v1/billing/portal`
+- `GET /api/v1/billing/invoices`
+- `GET /api/v1/billing/payments`
+- `GET /api/v1/billing/usage`
+- `POST /api/v1/billing/webhooks/:provider`
+- `GET|PATCH /api/v1/tenant/branding`
+- `GET|POST /api/v1/tenant/domains`
+- `GET|POST /api/v1/tenant/data-exports`
+- `GET|POST /api/v1/support/tickets`
+- `GET /api/v1/support/tickets/:id`
+- `POST /api/v1/support/tickets/:id/messages`
+- `POST|DELETE /api/v1/mobile/devices`
+- `POST|DELETE /api/v1/mobile/push-tokens`
+- `GET /api/v1/mobile/config`
+- `GET /api/v1/platform/saas`
+- `GET /api/v1/platform/tenants`
+- `GET /api/v1/platform/tenants/:id`
+- `PATCH /api/v1/platform/tenants/:id/status`
+- `PATCH /api/v1/platform/tenants/:id/plan`
+- `POST /api/v1/platform/tenants/:id/trial-extension`
+- `POST /api/v1/platform/tenants/:id/credits`
+
+Swagger documents these routes at `/api/docs` when Swagger is enabled.

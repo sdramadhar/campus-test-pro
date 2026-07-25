@@ -231,6 +231,18 @@
 - Expand k6 load-test profiles and document capacity testing without claiming 5,000 concurrent support until staging results pass.
 - Add enterprise docs for database/Redis/object storage/CDN/TLS/secrets/monitoring/logging/alerting/backups/DR/restore/security audit/incident response/performance/read replicas/WAF/zero-downtime deployment.
 
+## Phase 18 - Commercial SaaS Foundation
+
+- Add tenant lifecycle statuses for lead, trial, active, past-due, suspended, cancelled, and archived institutions.
+- Add tenant onboarding progress, setup checklist, institution signup, trial creation, and save/resume onboarding foundations.
+- Add subscription plans, plan versions, features, limits, tenant subscriptions, subscription history, billing customer, invoice, payment, checkout, webhook, credit, coupon, usage meter, entitlement, add-on, tax, and billing audit models.
+- Add disabled/mock billing provider abstraction plus production validation that rejects mock billing and requires server-side provider secrets for paid providers.
+- Add billing, subscription, usage, branding, custom-domain, support, announcement, mobile device, push-token, data export, legal, and platform tenant APIs with Swagger coverage.
+- Add route foundations for pricing, signup, onboarding, subscription settings, billing, support, super-admin SaaS operations, announcements, status, PWA offline shell, and mobile foundation documentation.
+- Add white-label branding validation, custom-domain DNS verification foundation, tenant export/cancellation foundations, legal document versioning, support ticket operations, mobile API conventions, and PWA safe-cache policy.
+- Seed four plans, features, limits, mock customer/invoice/payment data, active subscription, coupon, usage records, branding, pending domain, support ticket, announcement, and legal document versions.
+- Document that mock billing never charges money, custom domains require DNS/TLS, legal templates require professional review, PWA does not support offline high-stakes exams, mobile app is a foundation, and production launch still requires real deployment and load validation.
+
 ## Verification
 
 - Install dependencies.
@@ -244,6 +256,7 @@
 - For Phase 11, also verify `/questions/ai-generate`, `/questions/ai-jobs`, `/questions/import-document`, `/admin/ai/prompts`, `/admin/ai/usage`, `/academic/syllabi`, Swagger, and the mock-provider review workflow.
 - For Phase 16, also verify `/student/coding-submissions`, `/coding/reviews`, `/coding/plagiarism`, `/system/code-runner`, `/admin/code-runner/languages`, `/analytics/coding`, API health/readiness/Swagger, and `http://localhost:4100/health` for the local mock gateway.
 - For Phase 17, also verify `/system/infrastructure`, `/api/v1/system/infrastructure`, `/api/v1/system/capacity`, `/api/v1/system/deployment-safety`, `/api/v1/system/backups`, `/api/v1/system/alerts`, `/api/v1/system/metrics-summary`, `/api/v1/system/metrics`, Kubernetes manifest validation, monitoring config, secret scan, and k6 smoke script syntax where tooling is available.
+- For Phase 18, also verify `/pricing`, `/signup/institution`, `/onboarding`, `/settings/subscription`, `/settings/branding`, `/settings/domains`, `/support`, `/super-admin/saas`, `/super-admin/tenants`, `/status`, billing/subscription APIs, webhook idempotency, entitlement blocks, support isolation, mobile device/push-token ownership, data export audit, legal documents, PWA manifest/service worker, and Swagger.
 - For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.
 - For Phase 13, also verify `/questions/ai-batch`, `/assessments/ai-paper`, `/assessments/random-sets`, batch progress/cancel/retry APIs, generated paper-set APIs, model-answer APIs, prompt rollback, validation reports, question analytics, notifications, Swagger, and worker/API readiness.
 - For Phase 14, also verify `/super-admin/analytics`, `/admin/analytics`, `/faculty/analytics`, `/student/analytics`, `/analytics/compare`, `/leaderboards`, `/reports/builder`, `/reports/jobs`, `/analytics/insights`, analytics/report APIs, report download audit, leaderboard policy, AI insight review, and the predictive analytics limitations notice.

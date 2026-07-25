@@ -4,9 +4,13 @@ import {
   AiReviewStatus,
   AiGenerationJobStatus,
   AnalyticsJobStatus,
+  AnnouncementSeverity,
   BloomLevel,
   BackgroundJobStatus,
+  BillingProvider,
+  BillingRecordStatus,
   CollegeStatus,
+  EntitlementValueType,
   DocumentImportStatus,
   DuplicateReviewStatus,
   EntityStatus,
@@ -39,6 +43,12 @@ import {
   RunnerJobStatus,
   RunnerMode,
   SecurityReviewStatus,
+  SupportPriority,
+  SupportTicketStatus,
+  TenantDomainStatus,
+  TenantLifecycleStatus,
+  BillingInterval,
+  LegalDocumentType,
   InsightStatus,
   Role,
   SubmissionStatus,
@@ -2513,6 +2523,502 @@ async function main(): Promise<void> {
     });
     await prisma.codingSimilarityMatch.create({
       data: { id: "seed-coding-similarity-phase16", collegeId: demoCollege.id, jobId: plagiarismJob.id, assessmentId: activeExam.id, submissionAId: acceptedSubmission.id, submissionBId: wrongSubmission.id, languageId: "python", similarityScore: 0.72, tokenSimilarity: 0.72, normalizedSimilarity: 0.72, matchedRegions: { automaticPunishment: false, hiddenSourceRedacted: true }, reviewStatus: PlagiarismReviewStatus.UNREVIEWED },
+    });
+  }
+
+  const planSeeds = [
+    {
+      code: "FREE_TRIAL",
+      name: "Free Trial",
+      description: "Development trial plan with core academic workflows.",
+      priceCents: null,
+      trialDays: 14,
+      features: {
+        ai_question_generation: true,
+        document_import: true,
+        ocr: false,
+        advanced_analytics: false,
+        scheduled_reports: false,
+        coding_assessments: false,
+        proctoring: true,
+        custom_branding: false,
+        custom_domain: false,
+        api_access: false,
+        sso: false,
+        priority_support: false,
+        data_export: true,
+        mobile_access: true,
+        white_label: false,
+      },
+      limits: {
+        maximum_students: 100,
+        maximum_faculty: 10,
+        maximum_active_assessments: 5,
+        maximum_monthly_attempts: 500,
+        maximum_question_bank_size: 1000,
+        ai_tokens: 50000,
+        storage_bytes: 1073741824,
+        coding_executions: 0,
+      },
+    },
+    {
+      code: "STARTER",
+      name: "Starter",
+      description: "Small institution plan with configurable pricing.",
+      priceCents: null,
+      trialDays: 14,
+      features: {
+        ai_question_generation: true,
+        document_import: true,
+        ocr: false,
+        advanced_analytics: false,
+        scheduled_reports: true,
+        coding_assessments: false,
+        proctoring: true,
+        custom_branding: true,
+        custom_domain: false,
+        api_access: false,
+        sso: false,
+        priority_support: false,
+        data_export: true,
+        mobile_access: true,
+        white_label: false,
+      },
+      limits: {
+        maximum_students: 500,
+        maximum_faculty: 50,
+        maximum_active_assessments: 25,
+        maximum_monthly_attempts: 5000,
+        maximum_question_bank_size: 10000,
+        ai_tokens: 250000,
+        storage_bytes: 1500000000,
+        coding_executions: 0,
+      },
+    },
+    {
+      code: "PROFESSIONAL",
+      name: "Professional",
+      description: "Advanced plan with coding, analytics, and branding.",
+      priceCents: null,
+      trialDays: 14,
+      features: {
+        ai_question_generation: true,
+        document_import: true,
+        ocr: true,
+        advanced_analytics: true,
+        scheduled_reports: true,
+        coding_assessments: true,
+        proctoring: true,
+        custom_branding: true,
+        custom_domain: true,
+        api_access: true,
+        sso: false,
+        priority_support: true,
+        data_export: true,
+        mobile_access: true,
+        white_label: true,
+      },
+      limits: {
+        maximum_students: 5000,
+        maximum_faculty: 500,
+        maximum_active_assessments: 100,
+        maximum_monthly_attempts: 50000,
+        maximum_question_bank_size: 100000,
+        ai_tokens: 2000000,
+        storage_bytes: 1800000000,
+        coding_executions: 50000,
+      },
+    },
+    {
+      code: "ENTERPRISE",
+      name: "Enterprise",
+      description: "Custom contract plan for large institutions.",
+      priceCents: null,
+      trialDays: 30,
+      features: {
+        ai_question_generation: true,
+        ai_provider_usage: true,
+        document_import: true,
+        ocr: true,
+        advanced_analytics: true,
+        scheduled_reports: true,
+        coding_assessments: true,
+        proctoring: true,
+        live_proctoring: true,
+        private_object_storage: true,
+        custom_branding: true,
+        custom_domain: true,
+        api_access: true,
+        sso: true,
+        priority_support: true,
+        audit_log_retention: true,
+        evidence_retention: true,
+        data_export: true,
+        mobile_access: true,
+        white_label: true,
+      },
+      limits: {
+        maximum_students: 50000,
+        maximum_faculty: 5000,
+        maximum_active_assessments: 1000,
+        maximum_monthly_attempts: 500000,
+        maximum_question_bank_size: 1000000,
+        ai_tokens: 20000000,
+        storage_bytes: 2000000000,
+        coding_executions: 500000,
+      },
+    },
+  ] as const;
+
+  const planVersions = new Map<string, string>();
+  for (const planSeed of planSeeds) {
+    const plan = await prisma.subscriptionPlan.upsert({
+      where: { code: planSeed.code },
+      update: {
+        name: planSeed.name,
+        description: planSeed.description,
+        isActive: true,
+        isPublic: true,
+      },
+      create: {
+        code: planSeed.code,
+        name: planSeed.name,
+        description: planSeed.description,
+        isActive: true,
+        isPublic: true,
+      },
+    });
+    const version = await prisma.planVersion.upsert({
+      where: { planId_version: { planId: plan.id, version: 1 } },
+      update: {
+        currency: "USD",
+        billingInterval: BillingInterval.MONTHLY,
+        priceCents: planSeed.priceCents,
+        trialDays: planSeed.trialDays,
+        isActive: true,
+        metadata: { pricingConfiguredExternally: true },
+      },
+      create: {
+        planId: plan.id,
+        version: 1,
+        currency: "USD",
+        billingInterval: BillingInterval.MONTHLY,
+        priceCents: planSeed.priceCents,
+        trialDays: planSeed.trialDays,
+        isActive: true,
+        metadata: { pricingConfiguredExternally: true },
+      },
+    });
+    planVersions.set(planSeed.code, version.id);
+    for (const [featureKey, enabled] of Object.entries(planSeed.features)) {
+      await prisma.planFeature.upsert({
+        where: { planVersionId_featureKey: { planVersionId: version.id, featureKey } },
+        update: { enabled, valueType: EntitlementValueType.BOOLEAN },
+        create: {
+          planVersionId: version.id,
+          featureKey,
+          valueType: EntitlementValueType.BOOLEAN,
+          enabled,
+        },
+      });
+    }
+    for (const [limitKey, limitValue] of Object.entries(planSeed.limits)) {
+      await prisma.planLimit.upsert({
+        where: { planVersionId_limitKey: { planVersionId: version.id, limitKey } },
+        update: { limitValue },
+        create: { planVersionId: version.id, limitKey, limitValue },
+      });
+    }
+  }
+
+  const professionalVersionId = planVersions.get("PROFESSIONAL");
+  const starterVersionId = planVersions.get("STARTER");
+  const trialVersionId = planVersions.get("FREE_TRIAL");
+  if (!professionalVersionId || !starterVersionId || !trialVersionId) {
+    throw new Error("Phase 18 plan seed failed.");
+  }
+  const professionalVersion = await prisma.planVersion.findUniqueOrThrow({
+    where: { id: professionalVersionId },
+    include: { plan: true, features: true, limits: true },
+  });
+  await prisma.tenantProfile.upsert({
+    where: { collegeId: demoCollege.id },
+    update: {
+      status: TenantLifecycleStatus.ACTIVE,
+      verifiedAt: new Date("2026-07-25T00:00:00.000Z"),
+      onboardingPercent: 100,
+      setupChecklist: {
+        "college profile completed": true,
+        "logo uploaded": false,
+        "departments created": true,
+        "faculty added": true,
+        "students added": true,
+        "subjects configured": true,
+        "first question added": true,
+        "first assessment created": true,
+        "first test assigned": true,
+      },
+      billingEmail: demoCollege.email,
+    },
+    create: {
+      collegeId: demoCollege.id,
+      status: TenantLifecycleStatus.ACTIVE,
+      verifiedAt: new Date("2026-07-25T00:00:00.000Z"),
+      onboardingPercent: 100,
+      setupChecklist: {
+        "college profile completed": true,
+        "logo uploaded": false,
+        "departments created": true,
+        "faculty added": true,
+        "students added": true,
+        "subjects configured": true,
+        "first question added": true,
+        "first assessment created": true,
+        "first test assigned": true,
+      },
+      billingEmail: demoCollege.email,
+    },
+  });
+
+  await prisma.tenantSubscription.create({
+    data: {
+      collegeId: demoCollege.id,
+      planId: professionalVersion.planId,
+      planVersionId: professionalVersion.id,
+      status: TenantLifecycleStatus.ACTIVE,
+      provider: BillingProvider.MOCK,
+      currentPeriodStart: new Date("2026-07-01T00:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      planSnapshot: {
+        planCode: professionalVersion.plan.code,
+        planName: professionalVersion.plan.name,
+        version: professionalVersion.version,
+        pricingConfiguredExternally: true,
+      },
+      metadata: { seedOnly: true, noMoneyCharged: true },
+    },
+  });
+
+  for (const feature of professionalVersion.features) {
+    await prisma.featureEntitlement.upsert({
+      where: { collegeId_featureKey: { collegeId: demoCollege.id, featureKey: feature.featureKey } },
+      update: { enabled: feature.enabled, source: "PLAN" },
+      create: {
+        collegeId: demoCollege.id,
+        featureKey: feature.featureKey,
+        enabled: feature.enabled,
+        source: "PLAN",
+      },
+    });
+  }
+  for (const limit of professionalVersion.limits) {
+    await prisma.featureEntitlement.upsert({
+      where: { collegeId_featureKey: { collegeId: demoCollege.id, featureKey: limit.limitKey } },
+      update: { enabled: true, limitValue: limit.limitValue, source: "PLAN" },
+      create: {
+        collegeId: demoCollege.id,
+        featureKey: limit.limitKey,
+        enabled: true,
+        limitValue: limit.limitValue,
+        source: "PLAN",
+      },
+    });
+  }
+
+  for (const meter of [
+    ["active_students", "Active students", "count"],
+    ["faculty", "Faculty", "count"],
+    ["attempts", "Assessment attempts", "count"],
+    ["ai_requests", "AI requests", "count"],
+    ["ai_tokens", "AI tokens", "tokens"],
+    ["ocr_pages", "OCR pages", "pages"],
+    ["uploaded_storage_bytes", "Uploaded storage", "bytes"],
+    ["report_jobs", "Report jobs", "count"],
+    ["coding_executions", "Coding executions", "count"],
+    ["proctoring_sessions", "Proctoring sessions", "count"],
+    ["evidence_storage", "Evidence storage", "bytes"],
+    ["api_requests", "API requests", "count"],
+  ] as const) {
+    await prisma.usageMeter.upsert({
+      where: { meterKey: meter[0] },
+      update: { displayName: meter[1], unit: meter[2] },
+      create: { meterKey: meter[0], displayName: meter[1], unit: meter[2] },
+    });
+    await prisma.usageRecord.upsert({
+      where: {
+        collegeId_meterKey_idempotencyKey: {
+          collegeId: demoCollege.id,
+          meterKey: meter[0],
+          idempotencyKey: `seed-${meter[0]}-2026-07`,
+        },
+      },
+      update: { quantity: meter[0] === "ai_tokens" ? 12000 : 12 },
+      create: {
+        collegeId: demoCollege.id,
+        meterKey: meter[0],
+        quantity: meter[0] === "ai_tokens" ? 12000 : 12,
+        periodStart: new Date("2026-07-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-08-01T00:00:00.000Z"),
+        idempotencyKey: `seed-${meter[0]}-2026-07`,
+        source: "seed",
+      },
+    });
+  }
+
+  await prisma.billingCustomer.upsert({
+    where: { provider_providerCustomerId: { provider: BillingProvider.MOCK, providerCustomerId: "mock_demo_college" } },
+    update: { billingEmail: demoCollege.email, legalName: demoCollege.name },
+    create: {
+      collegeId: demoCollege.id,
+      provider: BillingProvider.MOCK,
+      providerCustomerId: "mock_demo_college",
+      billingEmail: demoCollege.email,
+      legalName: demoCollege.name,
+      address: { country: "US", region: "IL" },
+    },
+  });
+  await prisma.billingInvoice.upsert({
+    where: { provider_providerInvoiceId: { provider: BillingProvider.MOCK, providerInvoiceId: "mock_invoice_demo_001" } },
+    update: { status: BillingRecordStatus.PAID, amountPaidCents: 0 },
+    create: {
+      collegeId: demoCollege.id,
+      provider: BillingProvider.MOCK,
+      providerInvoiceId: "mock_invoice_demo_001",
+      invoiceNumber: "DEMO-001",
+      status: BillingRecordStatus.PAID,
+      currency: "USD",
+      amountDueCents: 0,
+      amountPaidCents: 0,
+      metadata: { demoOnly: true },
+    },
+  });
+  await prisma.billingPayment.upsert({
+    where: { provider_providerPaymentId: { provider: BillingProvider.MOCK, providerPaymentId: "mock_payment_demo_001" } },
+    update: { status: BillingRecordStatus.PAID },
+    create: {
+      collegeId: demoCollege.id,
+      provider: BillingProvider.MOCK,
+      providerPaymentId: "mock_payment_demo_001",
+      status: BillingRecordStatus.PAID,
+      currency: "USD",
+      amountCents: 0,
+      metadata: { demoOnly: true, noMoneyCharged: true },
+    },
+  });
+  await prisma.coupon.upsert({
+    where: { code: "DEMO-TRIAL-EXTENSION" },
+    update: { isActive: true },
+    create: {
+      code: "DEMO-TRIAL-EXTENSION",
+      description: "Seed coupon for extending a development trial.",
+      discountType: "TRIAL_EXTENSION",
+      discountValue: 0,
+      trialExtensionDays: 14,
+      validFrom: new Date("2026-01-01T00:00:00.000Z"),
+      maxRedemptions: 100,
+    },
+  });
+  await prisma.tenantBranding.upsert({
+    where: { collegeId: demoCollege.id },
+    update: {
+      institutionName: "Demo College",
+      shortName: "Demo",
+      primaryColor: "#0f5d4e",
+      secondaryColor: "#f0b429",
+      supportEmail: "support@demo-college.local",
+    },
+    create: {
+      collegeId: demoCollege.id,
+      institutionName: "Demo College",
+      shortName: "Demo",
+      primaryColor: "#0f5d4e",
+      secondaryColor: "#f0b429",
+      supportEmail: "support@demo-college.local",
+      updatedById: collegeAdmin.id,
+    },
+  });
+  await prisma.tenantDomain.upsert({
+    where: { domain: "tests.demo-college.local" },
+    update: { status: TenantDomainStatus.PENDING },
+    create: {
+      collegeId: demoCollege.id,
+      domain: "tests.demo-college.local",
+      status: TenantDomainStatus.PENDING,
+      verificationTokenHash: Buffer.from("seed-domain-token").toString("base64url"),
+      cnameTarget: "tenant.campustest.example",
+    },
+  });
+  const seedTicket = await prisma.supportTicket.upsert({
+    where: { id: "seed-support-ticket-phase18" },
+    update: {
+      status: SupportTicketStatus.OPEN,
+      priority: SupportPriority.NORMAL,
+    },
+    create: {
+      id: "seed-support-ticket-phase18",
+      collegeId: demoCollege.id,
+      createdById: collegeAdmin.id,
+      subject: "Demo onboarding support request",
+      category: "onboarding",
+      priority: SupportPriority.NORMAL,
+      status: SupportTicketStatus.OPEN,
+    },
+  });
+  await prisma.supportMessage.create({
+    data: {
+      ticketId: seedTicket.id,
+      authorUserId: collegeAdmin.id,
+      body: "Seeded support ticket message for Phase 18 validation.",
+    },
+  });
+  await prisma.platformAnnouncement.upsert({
+    where: { id: "seed-announcement-phase18" },
+    update: {
+      isPublished: true,
+      approvedForPublicStatus: true,
+    },
+    create: {
+      id: "seed-announcement-phase18",
+      title: "Phase 18 SaaS foundation available",
+      body: "Development announcement for onboarding, billing, support, and PWA foundations.",
+      severity: AnnouncementSeverity.INFO,
+      startsAt: new Date("2026-07-25T00:00:00.000Z"),
+      isPublished: true,
+      isPublic: true,
+      approvedForPublicStatus: true,
+      targetRoles: ["SUPER_ADMIN", "COLLEGE_ADMIN"],
+      createdById: superAdmin.id,
+    },
+  });
+
+  for (const type of [
+    LegalDocumentType.TERMS,
+    LegalDocumentType.PRIVACY,
+    LegalDocumentType.DATA_PROCESSING,
+    LegalDocumentType.ACCEPTABLE_USE,
+    LegalDocumentType.PROCTORING_NOTICE,
+    LegalDocumentType.BILLING_TERMS,
+  ]) {
+    const document = await prisma.legalDocument.upsert({
+      where: { slug: type.toLowerCase().replace(/_/g, "-") },
+      update: { title: `${type.replace(/_/g, " ")} - Legal Review Required` },
+      create: {
+        type,
+        slug: type.toLowerCase().replace(/_/g, "-"),
+        title: `${type.replace(/_/g, " ")} - Legal Review Required`,
+      },
+    });
+    await prisma.legalDocumentVersion.upsert({
+      where: { documentId_version: { documentId: document.id, version: "2026.07-dev" } },
+      update: { isPublished: true },
+      create: {
+        documentId: document.id,
+        version: "2026.07-dev",
+        effectiveAt: new Date("2026-07-25T00:00:00.000Z"),
+        requiresReacceptance: false,
+        contentMarkdown: "Placeholder template for development only. Requires qualified legal review before production use.",
+        isPublished: true,
+      },
     });
   }
 

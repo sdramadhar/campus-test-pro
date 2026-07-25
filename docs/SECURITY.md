@@ -36,3 +36,13 @@ Coding judge orchestration is protected by JWT guards, role guards, tenant isola
 Student responses redact hidden test input, expected output, evaluator metadata, runner tokens, internal runner URLs, and private source code belonging to other students. Plagiarism matches are advisory and require human review.
 
 See `docs/CODE_RUNNER_SECURITY.md`, `docs/CODE_RUNNER_THREAT_MODEL.md`, `docs/CODING_ASSESSMENTS.md`, and `docs/CODING_PLAGIARISM.md`.
+# Phase 18 Security Notes
+
+- Billing secrets stay server-side through environment variables.
+- Production rejects mock billing.
+- Checkout and portal flows must be provider-hosted or provider-tokenized.
+- Tenant billing, support, export, branding, and domain APIs enforce backend tenant isolation.
+- Push tokens are hashed before storage.
+- Support attachments require tenant authorization.
+- PWA service worker excludes APIs, exam attempts, answers, reports, coding submissions, tokens, and proctoring evidence from cache.
+- Legal templates are placeholders and do not represent compliance certification.

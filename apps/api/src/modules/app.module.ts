@@ -18,6 +18,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { ProctoringModule } from "./proctoring/proctoring.module";
 import { QuestionBankModule } from "./question-bank/question-bank.module";
 import { RedisModule } from "./redis/redis.module";
+import { SaasModule } from "./saas/saas.module";
 import { StorageModule } from "./storage/storage.module";
 import { StudentExamModule } from "./student-exam/student-exam.module";
 import { SystemModule } from "./system/system.module";
@@ -46,6 +47,7 @@ import { SystemModule } from "./system/system.module";
     ProctoringModule,
     QuestionBankModule,
     RedisModule,
+    SaasModule,
     StorageModule,
     StudentExamModule,
     HealthModule,

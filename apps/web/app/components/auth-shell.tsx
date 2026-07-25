@@ -88,6 +88,18 @@ const navItems: Array<{
     icon: "operations",
   },
   {
+    roles: ["SUPER_ADMIN"],
+    href: "/super-admin/saas",
+    label: "SaaS",
+    icon: "settings",
+  },
+  {
+    roles: ["SUPER_ADMIN"],
+    href: "/super-admin/tenants",
+    label: "Tenants",
+    icon: "building",
+  },
+  {
     roles: adminRoles,
     href: "/admin/analytics",
     label: "Analytics",
@@ -149,6 +161,36 @@ const navItems: Array<{
   },
   {
     roles: adminRoles,
+    href: "/onboarding",
+    label: "Onboarding",
+    icon: "activity",
+  },
+  {
+    roles: adminRoles,
+    href: "/settings/subscription",
+    label: "Subscription",
+    icon: "settings",
+  },
+  {
+    roles: adminRoles,
+    href: "/settings/branding",
+    label: "Branding",
+    icon: "settings",
+  },
+  {
+    roles: adminRoles,
+    href: "/settings/domains",
+    label: "Domains",
+    icon: "settings",
+  },
+  {
+    roles: adminRoles,
+    href: "/settings/data-export",
+    label: "Data Export",
+    icon: "audit",
+  },
+  {
+    roles: adminRoles,
     href: "/admin/permissions",
     label: "Permissions",
     icon: "permissions",
@@ -163,6 +205,18 @@ const navItems: Array<{
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY", "STUDENT"],
     href: "/admin/notifications",
     label: "Notifications",
+    icon: "notifications",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY", "STUDENT"],
+    href: "/support",
+    label: "Support",
+    icon: "notifications",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY", "STUDENT"],
+    href: "/announcements",
+    label: "Announcements",
     icon: "notifications",
   },
   {

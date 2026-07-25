@@ -119,6 +119,88 @@ a {
   padding: 32px;
 }
 
+.public-page {
+  min-height: 100vh;
+  padding: 24px clamp(16px, 4vw, 48px);
+}
+
+.public-nav {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 0 auto 32px;
+  max-width: 1160px;
+}
+
+.public-nav div,
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.button-link,
+.primary-button {
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 10px 14px;
+}
+
+.json-preview {
+  background: rgba(23, 32, 38, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 16px;
+  white-space: pre-wrap;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  margin: 24px auto 0;
+  max-width: 720px;
+}
+
+.form-grid input,
+.form-grid select,
+.form-grid textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.form-grid textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.update-toast {
+  background: var(--accent-strong);
+  border: 0;
+  border-radius: 8px;
+  bottom: 18px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 14px;
+  position: fixed;
+  right: 18px;
+  z-index: 50;
+}
+
 .topbar {
   display: flex;
   align-items: center;

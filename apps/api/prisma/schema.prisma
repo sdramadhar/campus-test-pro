@@ -86,6 +86,24 @@ enum AuditEvent {
   PROCTORING_REVIEW
   PROCTORING_EVIDENCE_ACCESS
   PROCTORING_OVERRIDE
+  TENANT_REGISTRATION
+  TENANT_ONBOARDING_UPDATE
+  TENANT_STATUS_UPDATE
+  TENANT_EXPORT_REQUEST
+  TENANT_CANCELLATION_REQUEST
+  SUBSCRIPTION_CHANGE
+  BILLING_CHECKOUT
+  BILLING_WEBHOOK
+  BILLING_PAYMENT_EVENT
+  PLAN_OVERRIDE_UPDATE
+  USAGE_METER_RECORDED
+  BRANDING_UPDATE
+  DOMAIN_UPDATE
+  SUPPORT_TICKET_CREATE
+  SUPPORT_TICKET_UPDATE
+  ANNOUNCEMENT_UPDATE
+  LEGAL_ACCEPTANCE
+  MOBILE_DEVICE_UPDATE
 }
 
 enum FullscreenExitPolicy {
@@ -3298,4 +3316,835 @@ model MaintenanceState {
   updatedByUserId String?
   updatedAt       DateTime  @updatedAt
   createdAt       DateTime  @default(now())
+}
+
+enum TenantLifecycleStatus {
+  LEAD
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  ARCHIVED
+}
+
+enum BillingProvider {
+  DISABLED
+  MOCK
+  STRIPE
+  RAZORPAY
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+  CUSTOM
+}
+
+enum BillingRecordStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+  EXPIRED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  DEAD_LETTER
+}
+
+enum EntitlementValueType {
+  BOOLEAN
+  NUMBER
+  TEXT
+}
+
+enum OverageBehavior {
+  BLOCK
+  SOFT_ALLOW
+  REQUIRE_APPROVAL
+}
+
+enum OnboardingStepStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum SupportPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum AnnouncementSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  CRITICAL
+}
+
+enum TenantDomainStatus {
+  PENDING
+  VERIFYING
+  VERIFIED
+  ACTIVE
+  FAILED
+  DISABLED
+}
+
+enum DomainCertificateState {
+  NOT_REQUESTED
+  PENDING
+  ISSUED
+  RENEWING
+  FAILED
+  EXPIRED
+}
+
+enum DataExportStatus {
+  REQUESTED
+  QUEUED
+  PROCESSING
+  READY
+  EXPIRED
+  FAILED
+  CANCELLED
+}
+
+enum LegalDocumentType {
+  TERMS
+  PRIVACY
+  DATA_PROCESSING
+  ACCEPTABLE_USE
+  PROCTORING_NOTICE
+  BILLING_TERMS
+}
+
+model TenantProfile {
+  id                         String                @id @default(cuid())
+  collegeId                  String                @unique
+  status                     TenantLifecycleStatus @default(TRIAL)
+  verifiedAt                 DateTime?
+  trialStartedAt             DateTime?
+  trialEndsAt                DateTime?
+  suspendedAt                DateTime?
+  cancelledAt                DateTime?
+  archivedAt                 DateTime?
+  readOnlyUntil              DateTime?
+  deletionRequestedAt        DateTime?
+  legalHold                  Boolean               @default(false)
+  onboardingPercent          Int                   @default(0)
+  onboardingCompletedAt      DateTime?
+  setupChecklist             Json?
+  billingEmail               String?
+  lifecycleReason            String?
+  metadata                   Json?
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+
+  @@index([status])
+  @@index([trialEndsAt])
+}
+
+model OnboardingProgress {
+  id          String               @id @default(cuid())
+  collegeId   String
+  step        String
+  status      OnboardingStepStatus @default(NOT_STARTED)
+  payload     Json?
+  completedAt DateTime?
+  updatedById String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([collegeId, step])
+  @@index([collegeId])
+}
+
+model SubscriptionPlan {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  name        String
+  description String
+  isPublic    Boolean       @default(true)
+  isActive    Boolean       @default(true)
+  versions    PlanVersion[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model PlanVersion {
+  id             String        @id @default(cuid())
+  planId         String
+  plan           SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  version        Int
+  currency       String
+  billingInterval BillingInterval @default(MONTHLY)
+  priceCents     Int?
+  trialDays      Int             @default(14)
+  isActive       Boolean         @default(true)
+  effectiveFrom  DateTime        @default(now())
+  metadata       Json?
+  features       PlanFeature[]
+  limits         PlanLimit[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([planId, version])
+  @@index([planId])
+  @@index([isActive])
+}
+
+model PlanFeature {
+  id            String               @id @default(cuid())
+  planVersionId String
+  planVersion   PlanVersion          @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  featureKey    String
+  valueType     EntitlementValueType @default(BOOLEAN)
+  enabled       Boolean              @default(false)
+  value         String?
+  metadata      Json?
+  createdAt     DateTime             @default(now())
+
+  @@unique([planVersionId, featureKey])
+  @@index([featureKey])
+}
+
+model PlanLimit {
+  id              String           @id @default(cuid())
+  planVersionId   String
+  planVersion     PlanVersion      @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  limitKey        String
+  limitValue      Int
+  overageBehavior OverageBehavior  @default(BLOCK)
+  softLimitValue  Int?
+  metadata        Json?
+  createdAt       DateTime         @default(now())
+
+  @@unique([planVersionId, limitKey])
+  @@index([limitKey])
+}
+
+model TenantSubscription {
+  id                    String                @id @default(cuid())
+  collegeId             String
+  planId                String
+  planVersionId         String
+  status                TenantLifecycleStatus @default(TRIAL)
+  provider              BillingProvider       @default(DISABLED)
+  providerSubscriptionId String?
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  trialEndsAt           DateTime?
+  cancelAtPeriodEnd     Boolean               @default(false)
+  planSnapshot          Json
+  overrideReason        String?
+  metadata              Json?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([collegeId])
+  @@index([planId])
+  @@index([planVersionId])
+  @@index([status])
+}
+
+model SubscriptionHistory {
+  id             String          @id @default(cuid())
+  collegeId      String
+  subscriptionId String?
+  fromPlanCode   String?
+  toPlanCode     String?
+  fromStatus     String?
+  toStatus       String?
+  reason         String
+  actorUserId    String?
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+
+  @@index([collegeId])
+  @@index([subscriptionId])
+}
+
+model BillingCustomer {
+  id                 String          @id @default(cuid())
+  collegeId          String
+  provider           BillingProvider @default(DISABLED)
+  providerCustomerId String?
+  billingEmail       String
+  legalName          String?
+  address            Json?
+  taxMetadata        Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([provider, providerCustomerId])
+  @@index([collegeId])
+}
+
+model BillingInvoice {
+  id                String              @id @default(cuid())
+  collegeId         String
+  provider          BillingProvider     @default(DISABLED)
+  providerInvoiceId String?
+  invoiceNumber     String?
+  status            BillingRecordStatus @default(PENDING)
+  currency          String
+  amountDueCents    Int                 @default(0)
+  amountPaidCents   Int                 @default(0)
+  hostedInvoiceUrl  String?
+  invoicePdfUrl     String?
+  dueAt             DateTime?
+  paidAt            DateTime?
+  metadata          Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([provider, providerInvoiceId])
+  @@index([collegeId])
+  @@index([status])
+}
+
+model BillingPayment {
+  id                String              @id @default(cuid())
+  collegeId         String
+  invoiceId         String?
+  provider          BillingProvider     @default(DISABLED)
+  providerPaymentId String?
+  status            BillingRecordStatus @default(PENDING)
+  currency          String
+  amountCents       Int                 @default(0)
+  metadata          Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([provider, providerPaymentId])
+  @@index([collegeId])
+  @@index([invoiceId])
+  @@index([status])
+}
+
+model BillingCheckoutSession {
+  id                String              @id @default(cuid())
+  collegeId         String
+  planVersionId     String
+  provider          BillingProvider     @default(DISABLED)
+  providerSessionId String?
+  idempotencyKey    String
+  status            BillingRecordStatus @default(PENDING)
+  checkoutUrl       String?
+  metadata          Json?
+  expiresAt         DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([provider, idempotencyKey])
+  @@index([collegeId])
+  @@index([status])
+}
+
+model BillingWebhookEvent {
+  id              String                  @id @default(cuid())
+  provider        BillingProvider
+  providerEventId String
+  eventType       String
+  status          WebhookProcessingStatus @default(RECEIVED)
+  payloadHash     String
+  payloadSummary  Json?
+  processedAt     DateTime?
+  failureReason   String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([provider, providerEventId])
+  @@index([status])
+  @@index([eventType])
+}
+
+model BillingCredit {
+  id            String   @id @default(cuid())
+  collegeId     String
+  currency      String
+  amountCents   Int
+  remainingCents Int
+  reason        String
+  expiresAt     DateTime?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@index([collegeId])
+}
+
+model Coupon {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  description     String
+  discountType    String
+  discountValue   Int
+  trialExtensionDays Int?
+  maxRedemptions  Int?
+  validFrom       DateTime
+  validUntil      DateTime?
+  isActive        Boolean  @default(true)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CouponRedemption {
+  id          String   @id @default(cuid())
+  couponId    String
+  collegeId   String
+  redeemedById String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@unique([couponId, collegeId])
+  @@index([collegeId])
+}
+
+model UsageMeter {
+  id          String   @id @default(cuid())
+  meterKey    String   @unique
+  displayName String
+  unit        String
+  aggregation String   @default("SUM")
+  isBillable  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UsageRecord {
+  id             String   @id @default(cuid())
+  collegeId      String
+  meterKey       String
+  quantity       Int
+  periodStart    DateTime
+  periodEnd      DateTime
+  idempotencyKey String
+  source         String
+  correctionOfId String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@unique([collegeId, meterKey, idempotencyKey])
+  @@index([collegeId, meterKey])
+  @@index([periodStart, periodEnd])
+}
+
+model FeatureEntitlement {
+  id              String              @id @default(cuid())
+  collegeId       String
+  featureKey      String
+  enabled         Boolean             @default(false)
+  limitValue      Int?
+  source          String              @default("PLAN")
+  overrideReason  String?
+  expiresAt       DateTime?
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([collegeId, featureKey])
+  @@index([featureKey])
+}
+
+model TenantAddOn {
+  id          String   @id @default(cuid())
+  collegeId   String
+  addOnKey    String
+  enabled     Boolean  @default(true)
+  limitDelta  Int?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([collegeId, addOnKey])
+}
+
+model SubscriptionChangeRequest {
+  id             String              @id @default(cuid())
+  collegeId      String
+  requestedPlanId String?
+  requestType    String
+  status         BillingRecordStatus @default(PENDING)
+  reason         String
+  requestedById  String?
+  effectiveAt    DateTime?
+  metadata       Json?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([collegeId])
+  @@index([status])
+}
+
+model TaxConfiguration {
+  id              String   @id @default(cuid())
+  collegeId       String   @unique
+  legalBusinessName String
+  billingAddress  Json
+  country         String
+  stateRegion     String?
+  postalCode      String?
+  taxId           String?
+  gstVat          String?
+  invoiceEmail    String
+  providerTaxMetadata Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model BillingAuditEvent {
+  id          String          @id @default(cuid())
+  collegeId   String?
+  provider    BillingProvider @default(DISABLED)
+  eventType   String
+  actorUserId String?
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+
+  @@index([collegeId])
+  @@index([eventType])
+}
+
+model TenantBranding {
+  id               String   @id @default(cuid())
+  collegeId        String   @unique
+  institutionName  String
+  shortName        String?
+  logoUrl          String?
+  faviconUrl       String?
+  primaryColor     String
+  secondaryColor   String
+  loginBackgroundUrl String?
+  emailLogoUrl     String?
+  reportLogoUrl    String?
+  footerText       String?
+  supportEmail     String?
+  supportPhone     String?
+  privacyPolicyUrl String?
+  termsUrl         String?
+  draft            Json?
+  version          Int      @default(1)
+  updatedById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model TenantBrandingVersion {
+  id          String   @id @default(cuid())
+  collegeId   String
+  version     Int
+  snapshot    Json
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([collegeId, version])
+  @@index([collegeId])
+}
+
+model TenantDomain {
+  id                 String                 @id @default(cuid())
+  collegeId          String
+  domain             String                 @unique
+  status             TenantDomainStatus     @default(PENDING)
+  verificationTokenHash String
+  cnameTarget        String
+  certificateStatus  DomainCertificateState @default(NOT_REQUESTED)
+  activatedAt        DateTime?
+  disabledAt         DateTime?
+  metadata           Json?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([collegeId])
+  @@index([status])
+}
+
+model DomainVerification {
+  id          String   @id @default(cuid())
+  domainId    String
+  method      String   @default("DNS_TXT")
+  expectedValueHash String
+  checkedAt   DateTime?
+  verifiedAt  DateTime?
+  failureReason String?
+  createdAt   DateTime @default(now())
+
+  @@index([domainId])
+}
+
+model OrganizationUnit {
+  id          String   @id @default(cuid())
+  collegeId   String
+  parentId    String?
+  unitType    String
+  name        String
+  code        String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([collegeId])
+  @@index([parentId])
+  @@unique([collegeId, unitType, code])
+}
+
+model SupportTicket {
+  id              String              @id @default(cuid())
+  collegeId       String
+  createdById     String?
+  subject         String
+  category        String
+  priority        SupportPriority     @default(NORMAL)
+  status          SupportTicketStatus @default(OPEN)
+  resolutionSummary String?
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([collegeId])
+  @@index([status])
+  @@index([priority])
+}
+
+model SupportMessage {
+  id          String   @id @default(cuid())
+  ticketId    String
+  authorUserId String?
+  body        String
+  isInternal  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model SupportAttachment {
+  id          String   @id @default(cuid())
+  ticketId    String
+  storageObjectId String?
+  fileName    String
+  contentType String
+  sizeBytes   Int
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model SupportAssignment {
+  id          String   @id @default(cuid())
+  ticketId    String
+  assignedToId String?
+  assignedById String?
+  reason      String
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model SupportSLAEvent {
+  id          String   @id @default(cuid())
+  ticketId    String
+  eventType   String
+  dueAt       DateTime?
+  occurredAt  DateTime @default(now())
+  metadata    Json?
+
+  @@index([ticketId])
+}
+
+model SupportAudit {
+  id          String   @id @default(cuid())
+  ticketId    String
+  actorUserId String?
+  action      String
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model PlatformAnnouncement {
+  id          String               @id @default(cuid())
+  title       String
+  body        String
+  severity    AnnouncementSeverity @default(INFO)
+  targetCollegeId String?
+  targetRoles  String[]
+  startsAt    DateTime
+  expiresAt   DateTime?
+  isPublished Boolean              @default(false)
+  isPublic    Boolean              @default(false)
+  approvedForPublicStatus Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([targetCollegeId])
+  @@index([isPublished])
+  @@index([startsAt])
+}
+
+model AnnouncementDismissal {
+  id             String   @id @default(cuid())
+  announcementId String
+  userId         String
+  dismissedAt    DateTime @default(now())
+
+  @@unique([announcementId, userId])
+}
+
+model EmailTemplateVersion {
+  id          String   @id @default(cuid())
+  templateKey String
+  version     Int
+  subject     String
+  bodyText    String
+  bodyHtml    String?
+  isActive    Boolean  @default(false)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@unique([templateKey, version])
+  @@index([templateKey, isActive])
+}
+
+model MobileDeviceSession {
+  id          String   @id @default(cuid())
+  userId      String
+  collegeId   String?
+  deviceName  String
+  platform    String
+  appVersion  String?
+  refreshTokenId String?
+  lastSeenAt  DateTime @default(now())
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([collegeId])
+}
+
+model MobilePushToken {
+  id          String   @id @default(cuid())
+  userId      String
+  collegeId   String?
+  deviceId    String?
+  provider    String
+  tokenHash   String   @unique
+  enabled     Boolean  @default(true)
+  lastSeenAt  DateTime @default(now())
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([collegeId])
+}
+
+model PushNotificationDelivery {
+  id          String   @id @default(cuid())
+  collegeId   String?
+  userId      String?
+  type        String
+  provider    String
+  status      String   @default("QUEUED")
+  safeTitle   String
+  safeBody    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([collegeId])
+  @@index([userId])
+}
+
+model TenantDataExport {
+  id          String           @id @default(cuid())
+  collegeId   String
+  requestedById String?
+  reason      String
+  categories  String[]
+  status      DataExportStatus @default(REQUESTED)
+  storageObjectId String?
+  downloadUrl String?
+  expiresAt   DateTime?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([collegeId])
+  @@index([status])
+}
+
+model TenantCancellationRequest {
+  id          String   @id @default(cuid())
+  collegeId   String
+  requestedById String?
+  reason      String
+  cancelAtPeriodEnd Boolean @default(true)
+  readOnlyStartsAt DateTime?
+  retentionEndsAt DateTime?
+  legalHold   Boolean @default(false)
+  status      String  @default("REQUESTED")
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([collegeId])
+  @@index([status])
+}
+
+model LegalDocument {
+  id          String            @id @default(cuid())
+  type        LegalDocumentType
+  slug        String            @unique
+  title       String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model LegalDocumentVersion {
+  id            String   @id @default(cuid())
+  documentId     String
+  version        String
+  effectiveAt    DateTime
+  requiresReacceptance Boolean @default(false)
+  contentMarkdown String
+  isPublished    Boolean @default(false)
+  createdAt      DateTime @default(now())
+
+  @@unique([documentId, version])
+  @@index([documentId])
+}
+
+model LegalAcceptance {
+  id          String   @id @default(cuid())
+  documentVersionId String
+  userId      String
+  collegeId   String?
+  ipHash      String?
+  acceptedAt  DateTime @default(now())
+
+  @@unique([documentVersionId, userId])
+  @@index([collegeId])
 }

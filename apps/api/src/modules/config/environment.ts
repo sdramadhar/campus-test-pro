@@ -105,6 +105,23 @@ export const environmentSchema = z
     OLLAMA_BASE_URL: z.string().default("http://localhost:11434"),
     OCR_PROVIDER: z.enum(["none", "tesseract"]).default("none"),
     TESSERACT_BINARY_PATH: z.string().default("tesseract"),
+    BILLING_ENABLED: z.enum(["true", "false"]).default("false"),
+    BILLING_PROVIDER: z
+      .enum(["DISABLED", "MOCK", "STRIPE", "RAZORPAY"])
+      .default("DISABLED"),
+    BILLING_PUBLIC_KEY: z.string().optional(),
+    BILLING_SECRET_KEY: z.string().optional(),
+    BILLING_WEBHOOK_SECRET: z.string().optional(),
+    BILLING_CURRENCY: z.string().default("USD"),
+    BILLING_SUCCESS_URL: optionalUrl,
+    BILLING_CANCEL_URL: optionalUrl,
+    BILLING_PORTAL_RETURN_URL: optionalUrl,
+    TRIAL_DAYS: z.coerce.number().int().positive().default(14),
+    MOBILE_MIN_SUPPORTED_VERSION: z.string().default("0.1.0"),
+    PWA_ENABLED: z.enum(["true", "false"]).default("true"),
+    PUSH_PROVIDER: z.enum(["disabled", "web-push", "fcm"]).default("disabled"),
+    PUSH_PUBLIC_KEY: z.string().optional(),
+    PUSH_PRIVATE_KEY: z.string().optional(),
     SWAGGER_ENABLED: z.enum(["true", "false"]).default("true"),
     MAINTENANCE_MODE: z.enum(["true", "false"]).default("false"),
     ALLOW_ADMIN_DURING_MAINTENANCE: z.enum(["true", "false"]).default("true"),
@@ -259,6 +276,34 @@ export const environmentSchema = z
           code: "custom",
           path: ["EMAIL_FROM"],
           message: "Email sender is required.",
+        });
+      }
+      if (env.BILLING_PROVIDER === "MOCK") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["BILLING_PROVIDER"],
+          message: "Mock billing provider is not allowed in production.",
+        });
+      }
+      if (
+        env.BILLING_ENABLED === "true" &&
+        (env.BILLING_PROVIDER === "STRIPE" || env.BILLING_PROVIDER === "RAZORPAY") &&
+        (!env.BILLING_SECRET_KEY || !env.BILLING_WEBHOOK_SECRET)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["BILLING_SECRET_KEY"],
+          message: "Paid billing providers require server-side secret and webhook secrets.",
+        });
+      }
+      if (
+        env.PUSH_PROVIDER !== "disabled" &&
+        (!env.PUSH_PUBLIC_KEY || !env.PUSH_PRIVATE_KEY)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["PUSH_PUBLIC_KEY"],
+          message: "Push notifications require server-side provider keys.",
         });
       }
       if (

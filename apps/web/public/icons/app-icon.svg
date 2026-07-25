@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CampusTest Pro">
+  <rect width="512" height="512" rx="96" fill="#1f7a68"/>
+  <path d="M104 164h304v48H104zM136 244h240v44H136zM168 320h176v44H168z" fill="#fff"/>
+  <path d="M104 124l152-64 152 64-152 64z" fill="#f0b429"/>
+</svg>

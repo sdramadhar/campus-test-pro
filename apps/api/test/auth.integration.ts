@@ -268,11 +268,212 @@ async function main(): Promise<void> {
       mustGet(sessions, "FACULTY"),
       studentSession,
     );
+    await runSaasFoundationTests(
+      baseUrl,
+      app.get(PrismaService),
+      mustGet(sessions, "SUPER_ADMIN"),
+      adminSession,
+      studentSession,
+    );
 
     console.log("Auth integration tests passed.");
   } finally {
     await app.close();
   }
+}
+
+async function runSaasFoundationTests(
+  baseUrl: string,
+  prisma: PrismaService,
+  superAdminSession: TestSession,
+  adminSession: TestSession,
+  studentSession: TestSession,
+): Promise<void> {
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/billing/plans`),
+    200,
+    "public plans endpoint",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/status`),
+    200,
+    "public status endpoint",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/onboarding`, {
+      headers: { Cookie: studentSession.cookie },
+    }),
+    403,
+    "student cannot manage onboarding",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/onboarding`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "college admin can view onboarding",
+  );
+  const plansResponse = await fetch(`${baseUrl}/api/v1/billing/plans`, {
+    headers: { Cookie: adminSession.cookie },
+  });
+  assertEqual(plansResponse.status, 200, "billing plans fetch");
+  const plans = (await plansResponse.json()) as {
+    plans: Array<{ versionId: string | null; code: string }>;
+  };
+  const starter = plans.plans.find((plan) => plan.code === "STARTER");
+  assert(Boolean(starter?.versionId), "seeded STARTER plan version exists");
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/billing/subscription/checkout",
+      adminSession.cookie,
+      { planVersionId: starter?.versionId, idempotencyKey: "phase18-checkout-test" },
+    ),
+    201,
+    "mock checkout session creation",
+  );
+  await expectStatus(
+    postJson(baseUrl, "/api/v1/billing/webhooks/MOCK", {
+      id: "phase18-webhook-test",
+      type: "checkout.completed",
+      object: "event",
+    }),
+    201,
+    "mock webhook idempotency",
+  );
+  await expectStatus(
+    postJson(baseUrl, "/api/v1/billing/webhooks/MOCK", {
+      id: "phase18-webhook-test",
+      type: "checkout.completed",
+      object: "event",
+    }),
+    201,
+    "mock webhook replay handled idempotently",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/billing/subscription`, {
+      headers: { Cookie: studentSession.cookie },
+    }),
+    403,
+    "student cannot view tenant billing",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/tenant/branding`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "tenant branding fetch",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/tenant/domains",
+      adminSession.cookie,
+      { domain: "phase18.demo-college.local" },
+    ),
+    201,
+    "custom domain verification foundation",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/support/tickets",
+      studentSession.cookie,
+      {
+        subject: "Phase 18 support test",
+        category: "support",
+        priority: "NORMAL",
+        message: "This is a tenant-isolated support ticket test.",
+      },
+    ),
+    201,
+    "student support ticket creation",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/support/tickets`, {
+      headers: { Cookie: superAdminSession.cookie },
+    }),
+    200,
+    "platform support queue",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/mobile/devices",
+      studentSession.cookie,
+      { deviceName: "Phase 18 test device", platform: "web", appVersion: "0.1.0" },
+    ),
+    201,
+    "mobile device registration",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/mobile/config`, {
+      headers: { Cookie: studentSession.cookie },
+    }),
+    200,
+    "mobile config",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/tenant/data-exports",
+      adminSession.cookie,
+      { categories: ["users", "settings"], reason: "Phase 18 export test" },
+    ),
+    201,
+    "tenant data export request",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/platform/saas`, {
+      headers: { Cookie: superAdminSession.cookie },
+    }),
+    200,
+    "super admin SaaS dashboard",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/platform/tenants`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    403,
+    "college admin cannot access platform tenants",
+  );
+  const tenant = await prisma.college.findUniqueOrThrow({
+    where: { collegeCode: "DEMO" },
+  });
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      `/api/v1/platform/tenants/${tenant.id}/trial-extension`,
+      superAdminSession.cookie,
+      { days: 7, reason: "Phase 18 trial extension test" },
+    ),
+    201,
+    "super admin trial extension",
+  );
+  validateEnvironment({ ...process.env, BILLING_PROVIDER: "MOCK", NODE_ENV: "test" });
+  assert(true, "mock billing allowed in test");
+  assertThrows(
+    () =>
+      validateEnvironment({
+        ...process.env,
+        NODE_ENV: "production",
+        APP_ENV: "production",
+        BILLING_PROVIDER: "MOCK",
+        SWAGGER_ENABLED: "false",
+        COOKIE_SECURE: "true",
+        AI_PROVIDER: "openai",
+        AI_API_KEY: "production-ai-provider-key-placeholder",
+        CODE_RUNNER_MODE: "REMOTE_RUNNER",
+        CODE_RUNNER_URL: "https://runner.example.com",
+        CODE_RUNNER_INTERNAL_TOKEN: "production-runner-token-placeholder",
+        FRONTEND_URL: "https://app.example.com",
+        API_URL: "https://api.example.com",
+        DIRECT_DATABASE_URL: process.env.DIRECT_DATABASE_URL,
+        INTERNAL_SERVICE_TOKEN: "production-internal-token-placeholder",
+      }),
+    "mock billing rejected in production",
+  );
+  validateEnvironment({ ...process.env, BILLING_PROVIDER: "DISABLED" });
 }
 
 async function runQuestionBankAssessmentTests(
@@ -1848,9 +2049,14 @@ async function runAiWorkflowTests(
   facultySession: TestSession,
   studentSession: TestSession,
 ): Promise<void> {
-  const subject = await prisma.subject.findFirstOrThrow({
-    where: { collegeId: adminSession.body.user.collegeId ?? "" },
+  const assignment = await prisma.subjectAssignment.findFirstOrThrow({
+    where: {
+      collegeId: adminSession.body.user.collegeId ?? "",
+      userId: facultySession.body.user.id,
+    },
+    include: { subject: true },
   });
+  const subject = assignment.subject;
 
   await expectStatus(
     postJsonWithCookie(
@@ -2937,6 +3143,15 @@ function assertEqual<T>(actual: T, expected: T, label: string): void {
       `Assertion failed: ${label}. Expected ${String(expected)}, got ${String(actual)}.`,
     );
   }
+}
+
+function assertThrows(action: () => unknown, label: string): void {
+  try {
+    action();
+  } catch {
+    return;
+  }
+  throw new Error(`Assertion failed: ${label}.`);
 }
 
 void main();

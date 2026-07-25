@@ -99,3 +99,8 @@ Phase 16 adds:
 `CodingQuestion` is extended with runner limits, checker metadata, partial-scoring policy, per-language starter code, reference-solution metadata, and expected complexity. `TestCase` is extended with group, score, and sample-explanation metadata.
 
 Hidden tests remain in PostgreSQL and are not returned by student-facing APIs. Runner jobs and plagiarism records are tenant-scoped and indexed by college, assessment, question, status, and timestamps.
+# Phase 18 SaaS Models
+
+Phase 18 adds models for tenant lifecycle, onboarding, subscription plans, plan versions, features, limits, tenant subscriptions, billing customers, invoices, payments, checkout sessions, webhook events, credits, coupons, usage meters, entitlements, add-ons, tax configuration, branding, domain verification, organization units, support tickets, announcements, email templates, mobile devices, push tokens, tenant exports, cancellation requests, legal documents, and legal acceptance.
+
+The schema intentionally stores provider-specific billing details as metadata and references; raw card data, secrets, private keys, and provider tokens must not be stored.
