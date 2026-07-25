@@ -82,6 +82,24 @@ const navItems: Array<{
     icon: "building",
   },
   {
+    roles: ["SUPER_ADMIN"],
+    href: "/super-admin/analytics",
+    label: "Platform Analytics",
+    icon: "operations",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/analytics",
+    label: "Analytics",
+    icon: "operations",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/reports",
+    label: "Reports",
+    icon: "audit",
+  },
+  {
     roles: adminRoles,
     href: "/admin/departments",
     label: "Departments",
@@ -256,10 +274,28 @@ const navItems: Array<{
     icon: "user",
   },
   {
+    roles: ["FACULTY"],
+    href: "/faculty/analytics",
+    label: "Faculty Analytics",
+    icon: "operations",
+  },
+  {
     roles: ["STUDENT"],
     href: "/dashboard/student",
     label: "Student",
     icon: "student",
+  },
+  {
+    roles: ["STUDENT"],
+    href: "/student/analytics",
+    label: "My Analytics",
+    icon: "operations",
+  },
+  {
+    roles: ["STUDENT"],
+    href: "/student/report",
+    label: "My Report",
+    icon: "results",
   },
   { roles: ["STUDENT"], href: "/student/tests", label: "Tests", icon: "tests" },
   {
@@ -267,6 +303,24 @@ const navItems: Array<{
     href: "/student/results",
     label: "Results",
     icon: "results",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY", "STUDENT"],
+    href: "/leaderboards",
+    label: "Leaderboards",
+    icon: "results",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/reports/builder",
+    label: "Report Builder",
+    icon: "audit",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/analytics/insights",
+    label: "AI Insights",
+    icon: "activity",
   },
 ];
 

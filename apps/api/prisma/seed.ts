@@ -3,6 +3,7 @@ import {
   AiPromptFeatureType,
   AiReviewStatus,
   AiGenerationJobStatus,
+  AnalyticsJobStatus,
   BloomLevel,
   BackgroundJobStatus,
   CollegeStatus,
@@ -17,8 +18,12 @@ import {
   QuestionDifficulty,
   QuestionStatus,
   QuestionType,
+  ReportJobStatus,
+  ReportOutputFormat,
+  ReportScheduleFrequency,
   ResultVisibility,
   SecurityReviewStatus,
+  InsightStatus,
   Role,
   SubmissionStatus,
   TestCaseVisibility,
@@ -1720,6 +1725,259 @@ async function main(): Promise<void> {
       newScore: publishedResult.totalScore,
       oldStatus: ModerationStatus.NONE,
       newStatus: ModerationStatus.RELEASED,
+    },
+  });
+
+  await prisma.exportAudit.deleteMany({
+    where: { reportJobId: "seed-report-job-phase14" },
+  });
+  await prisma.reportFile.deleteMany({
+    where: { jobId: "seed-report-job-phase14" },
+  });
+  await prisma.reportGenerationJob.deleteMany({
+    where: { id: "seed-report-job-phase14" },
+  });
+  await prisma.reportSchedule.deleteMany({
+    where: { reportId: "seed-report-definition-phase14" },
+  });
+  await prisma.reportDefinition.deleteMany({
+    where: { id: "seed-report-definition-phase14" },
+  });
+  await prisma.analyticsInsight.deleteMany({
+    where: { id: "seed-analytics-insight-phase14" },
+  });
+  await prisma.leaderboardSnapshot.deleteMany({
+    where: { id: "seed-leaderboard-phase14" },
+  });
+  await prisma.analyticsAggregationJob.deleteMany({
+    where: { id: "seed-analytics-job-phase14" },
+  });
+  await prisma.analyticsSnapshot.deleteMany({
+    where: { id: "seed-analytics-snapshot-phase14" },
+  });
+  await prisma.studentPerformanceSnapshot.deleteMany({
+    where: { id: "seed-student-performance-phase14" },
+  });
+  await prisma.assessmentPerformanceSnapshot.deleteMany({
+    where: { id: "seed-assessment-performance-phase14" },
+  });
+  await prisma.questionPerformanceSnapshot.deleteMany({
+    where: { id: "seed-question-performance-phase14" },
+  });
+  await prisma.benchmarkSnapshot.deleteMany({
+    where: { id: "seed-benchmark-phase14" },
+  });
+
+  await prisma.analyticsSnapshot.create({
+    data: {
+      id: "seed-analytics-snapshot-phase14",
+      collegeId: demoCollege.id,
+      scope: "COLLEGE",
+      subjectId: subject.id,
+      assessmentId: activeExam.id,
+      metricDate: new Date("2026-07-25T00:00:00.000Z"),
+      dateRange: { label: "seed", timezone: "Asia/Kolkata" },
+      metrics: {
+        participationRate: 100,
+        completionRate: 100,
+        averageScore: publishedResult.percentage,
+        passPercentage: 100,
+      },
+      metadata: { phase: 14, source: "seed" },
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+    },
+  });
+
+  await prisma.analyticsAggregationJob.create({
+    data: {
+      id: "seed-analytics-job-phase14",
+      collegeId: demoCollege.id,
+      scope: "COLLEGE_DAILY",
+      status: AnalyticsJobStatus.COMPLETED,
+      progress: 100,
+      resultSummary: { snapshots: 1, phase: 14 },
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+      startedAt: new Date("2026-07-25T08:00:00.000Z"),
+      completedAt: new Date("2026-07-25T08:01:00.000Z"),
+    },
+  });
+
+  await prisma.reportDefinition.create({
+    data: {
+      id: "seed-report-definition-phase14",
+      collegeId: demoCollege.id,
+      ownerId: collegeAdmin.id,
+      name: "Demo Assessment Result Report",
+      reportType: "assessment-results",
+      description: "Seeded Phase 14 report definition for local analytics verification.",
+      filters: { assessmentId: activeExam.id },
+      columns: ["studentId", "assessmentId", "percentage", "passStatus"],
+      outputFormat: ReportOutputFormat.CSV,
+      isShared: true,
+      metadata: { phase: 14 },
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+    },
+  });
+
+  await prisma.reportGenerationJob.create({
+    data: {
+      id: "seed-report-job-phase14",
+      collegeId: demoCollege.id,
+      reportId: "seed-report-definition-phase14",
+      requestedById: collegeAdmin.id,
+      status: ReportJobStatus.COMPLETED,
+      reportType: "assessment-results",
+      filters: { assessmentId: activeExam.id },
+      outputFormat: ReportOutputFormat.CSV,
+      progress: 100,
+      rowCount: 1,
+      startedAt: new Date("2026-07-25T08:02:00.000Z"),
+      completedAt: new Date("2026-07-25T08:03:00.000Z"),
+      expiresAt: new Date("2026-08-25T00:00:00.000Z"),
+      metadata: { phase: 14, truncated: false },
+    },
+  });
+
+  await prisma.reportFile.create({
+    data: {
+      id: "seed-report-file-phase14",
+      collegeId: demoCollege.id,
+      jobId: "seed-report-job-phase14",
+      requestedById: collegeAdmin.id,
+      fileName: "demo-assessment-results.csv",
+      mimeType: "text/csv; charset=utf-8",
+      outputFormat: ReportOutputFormat.CSV,
+      sizeBytes: 128,
+      storageKey: "reports/seed-report-job-phase14.csv",
+      expiresAt: new Date("2026-08-25T00:00:00.000Z"),
+      metadata: {
+        phase: 14,
+        content:
+          'Generated At,2026-07-25T00:00:00.000Z\n"studentId","assessmentId","percentage","passStatus"',
+      },
+    },
+  });
+
+  await prisma.reportSchedule.create({
+    data: {
+      id: "seed-report-schedule-phase14",
+      collegeId: demoCollege.id,
+      reportId: "seed-report-definition-phase14",
+      ownerId: collegeAdmin.id,
+      frequency: ReportScheduleFrequency.WEEKLY,
+      timezone: "Asia/Kolkata",
+      nextRunAt: new Date("2026-07-31T09:00:00.000Z"),
+      active: true,
+      delivery: { inApp: true, email: false },
+      metadata: { phase: 14 },
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+    },
+  });
+
+  await prisma.leaderboardSnapshot.create({
+    data: {
+      id: "seed-leaderboard-phase14",
+      collegeId: demoCollege.id,
+      scope: "ASSESSMENT",
+      assessmentId: activeExam.id,
+      subjectId: subject.id,
+      batchId: batch.id,
+      policy: {
+        publishedOnly: true,
+        tieBreakers: ["score", "timeTaken", "submissionTime"],
+        anonymousByDefault: true,
+      },
+      entries: [{ rank: 1, displayName: "Learner 01", percentage: publishedResult.percentage }],
+      expiresAt: new Date("2026-08-25T00:00:00.000Z"),
+      createdById: collegeAdmin.id,
+    },
+  });
+
+  await prisma.analyticsInsight.create({
+    data: {
+      id: "seed-analytics-insight-phase14",
+      collegeId: demoCollege.id,
+      scope: "COLLEGE",
+      assessmentId: activeExam.id,
+      subjectId: subject.id,
+      title: "Review topic coverage balance",
+      summary: "Seeded aggregate insight based on Demo College assessment analytics.",
+      recommendation:
+        "Use this advisory insight as a human-review prompt before changing blueprints.",
+      confidence: 0.55,
+      source: "rule-based",
+      aggregatePayload: { passPercentage: 100, sampleSize: 1 },
+      status: InsightStatus.PENDING_REVIEW,
+      createdById: collegeAdmin.id,
+      updatedById: collegeAdmin.id,
+    },
+  });
+
+  await prisma.studentPerformanceSnapshot.create({
+    data: {
+      id: "seed-student-performance-phase14",
+      collegeId: demoCollege.id,
+      studentId: student.id,
+      subjectId: subject.id,
+      assessmentId: activeExam.id,
+      snapshotDate: new Date("2026-07-25T00:00:00.000Z"),
+      metrics: { averageScore: publishedResult.percentage, passRate: 100, trend: "stable" },
+    },
+  });
+
+  await prisma.assessmentPerformanceSnapshot.create({
+    data: {
+      id: "seed-assessment-performance-phase14",
+      collegeId: demoCollege.id,
+      assessmentId: activeExam.id,
+      snapshotDate: new Date("2026-07-25T00:00:00.000Z"),
+      metrics: { averageScore: publishedResult.percentage, submittedAttempts: 1 },
+    },
+  });
+
+  if (createdQuestions[0]) {
+    await prisma.questionPerformanceSnapshot.create({
+      data: {
+        id: "seed-question-performance-phase14",
+        collegeId: demoCollege.id,
+        questionId: createdQuestions[0].id,
+        assessmentId: activeExam.id,
+        approvedDifficulty: createdQuestions[0].difficulty,
+        measuredDifficulty: QuestionDifficulty.EASY,
+        measuredAt: new Date("2026-07-25T00:00:00.000Z"),
+        sampleSize: 1,
+        metrics: { correctRate: 100, lowSampleWarning: true },
+      },
+    });
+  }
+
+  await prisma.benchmarkSnapshot.create({
+    data: {
+      id: "seed-benchmark-phase14",
+      collegeId: demoCollege.id,
+      dimension: "batch",
+      groupKey: batch.id,
+      metricDate: new Date("2026-07-25T00:00:00.000Z"),
+      metrics: { averageScore: publishedResult.percentage, normalized: 1 },
+      metadata: { phase: 14 },
+    },
+  });
+
+  await prisma.exportAudit.create({
+    data: {
+      id: "seed-export-audit-phase14",
+      collegeId: demoCollege.id,
+      userId: collegeAdmin.id,
+      reportFileId: "seed-report-file-phase14",
+      reportJobId: "seed-report-job-phase14",
+      reportType: "assessment-results",
+      format: ReportOutputFormat.CSV,
+      action: "SEED_DOWNLOAD_AUDIT",
+      metadata: { phase: 14 },
     },
   });
 

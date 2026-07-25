@@ -273,6 +273,59 @@ AI defaults are development-only. `AI_PROVIDER=mock` creates deterministic sampl
 
 Phase 13 adds an AI examination engine on top of the Phase 11/12 workflow foundation. Faculty and administrators can batch-generate 10-500 review-first questions, track progress, cancel or retry jobs, generate model answers, generate draft exam papers from syllabus/blueprint distributions, create duplicate-free random sets A-D, inspect AI question analytics, roll back prompt versions, and view document-import validation reports. Seed data includes a completed demo AI batch generation and generated paper set for Demo College.
 
+Phase 14 analytics and reporting routes:
+
+- `GET /api/v1/analytics/platform`
+- `GET /api/v1/analytics/colleges`
+- `GET /api/v1/analytics/college`
+- `GET /api/v1/analytics/departments`
+- `GET /api/v1/analytics/batches`
+- `GET /api/v1/analytics/faculty`
+- `GET /api/v1/analytics/student`
+- `GET /api/v1/students/:studentId/analytics`
+- `GET /api/v1/assessments/:assessmentId/analytics`
+- `GET /api/v1/assessments/:assessmentId/leaderboard`
+- `GET /api/v1/assessments/:assessmentId/report`
+- `GET /api/v1/questions/:questionId/analytics`
+- `GET /api/v1/analytics/subjects`
+- `GET /api/v1/analytics/topics`
+- `GET /api/v1/academic/syllabi/:id/analytics`
+- `POST /api/v1/analytics/compare`
+- `GET|POST|PATCH|DELETE /api/v1/reports`
+- `POST /api/v1/reports/:id/run`
+- `POST /api/v1/reports/:id/schedule`
+- `GET /api/v1/report-jobs`
+- `GET /api/v1/report-jobs/:jobId`
+- `POST /api/v1/report-jobs/:jobId/cancel`
+- `GET /api/v1/report-files/:fileId/download`
+- `GET /api/v1/analytics/insights`
+- `POST /api/v1/analytics/insights/generate`
+- `PATCH /api/v1/analytics/insights/:id/review`
+
+Phase 14 frontend routes:
+
+- `/super-admin/analytics`
+- `/admin/analytics`
+- `/admin/reports`
+- `/faculty/analytics`
+- `/student/analytics`
+- `/analytics/subjects`
+- `/analytics/topics`
+- `/analytics/compare`
+- `/leaderboards`
+- `/assessments/[assessmentId]/analytics`
+- `/assessments/[assessmentId]/leaderboard`
+- `/assessments/[assessmentId]/reports`
+- `/questions/[questionId]/analytics`
+- `/students/[studentId]/report`
+- `/student/report`
+- `/reports/builder`
+- `/reports/saved`
+- `/reports/jobs`
+- `/analytics/insights`
+
+Phase 14 uses PostgreSQL as the source of truth and Redis only for short-lived, tenant-prefixed aggregate caching. Reports are generated server-side, download attempts are audited, CSV output escapes formula-leading values, leaderboards use published results only, and AI insights are aggregate-only suggestions requiring human review. PDF and XLSX support are implemented as foundations; production-grade rendering/storage should be hardened before external distribution.
+
 Phase 12 AI/OCR environment variables:
 
 - `AI_PROVIDER`, `AI_MODEL`, `AI_TEMPERATURE`, `AI_MAX_OUTPUT_TOKENS`, `AI_EMBEDDING_MODEL`

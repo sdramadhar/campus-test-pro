@@ -76,6 +76,49 @@ enum AuditEvent {
   DOCUMENT_IMPORT_APPROVE
   DUPLICATE_REVIEW
   SYLLABUS_UPDATE
+  REPORT_DOWNLOAD
+  REPORT_CREATE
+  REPORT_RUN
+  ANALYTICS_INSIGHT_REVIEW
+}
+
+enum AnalyticsJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ReportJobStatus {
+  DRAFT
+  QUEUED
+  GENERATING
+  COMPLETED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum ReportOutputFormat {
+  CSV
+  XLSX
+  PDF
+  HTML
+}
+
+enum ReportScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CRON
+}
+
+enum InsightStatus {
+  PENDING_REVIEW
+  USEFUL
+  DISMISSED
+  NEEDS_REVIEW
 }
 
 enum EmailProvider {
@@ -1638,6 +1681,315 @@ model AiGeneratedPaperSet {
   @@index([assessmentId])
   @@index([requestedById])
   @@index([subjectId])
+}
+
+model AnalyticsSnapshot {
+  id           String   @id @default(cuid())
+  collegeId    String?
+  scope        String
+  subjectId    String?
+  assessmentId String?
+  metricDate   DateTime
+  dateRange    Json?
+  metrics      Json
+  metadata     Json?
+  createdById  String?
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([collegeId, scope])
+  @@index([assessmentId])
+  @@index([subjectId])
+  @@index([metricDate])
+}
+
+model AnalyticsAggregationJob {
+  id            String             @id @default(cuid())
+  collegeId     String?
+  scope         String
+  status        AnalyticsJobStatus @default(QUEUED)
+  dateRange     Json?
+  progress      Int                @default(0)
+  resultSummary Json?
+  errorMessage  String?
+  createdById   String?
+  updatedById   String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([collegeId])
+  @@index([scope])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ReportDefinition {
+  id           String             @id @default(cuid())
+  collegeId    String?
+  ownerId      String
+  name         String
+  reportType   String
+  description  String?
+  filters      Json?
+  columns      String[]
+  sortOrder    Json?
+  outputFormat ReportOutputFormat @default(CSV)
+  isShared     Boolean            @default(false)
+  metadata     Json?
+  createdById  String
+  updatedById  String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([collegeId])
+  @@index([ownerId])
+  @@index([reportType])
+  @@index([createdAt])
+}
+
+model ReportGenerationJob {
+  id            String             @id @default(cuid())
+  collegeId     String?
+  reportId      String?
+  requestedById String
+  status        ReportJobStatus    @default(QUEUED)
+  reportType    String
+  filters       Json?
+  outputFormat  ReportOutputFormat @default(CSV)
+  progress      Int                @default(0)
+  rowCount      Int                @default(0)
+  errorMessage  String?
+  metadata      Json?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([collegeId])
+  @@index([reportId])
+  @@index([requestedById])
+  @@index([status])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model ReportFile {
+  id            String             @id @default(cuid())
+  collegeId     String?
+  jobId         String
+  requestedById String
+  fileName      String
+  mimeType      String
+  outputFormat  ReportOutputFormat
+  sizeBytes     Int                @default(0)
+  storageKey    String
+  checksum      String?
+  expiresAt     DateTime
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+
+  @@index([collegeId])
+  @@index([jobId])
+  @@index([requestedById])
+  @@index([expiresAt])
+}
+
+model ReportSchedule {
+  id             String                  @id @default(cuid())
+  collegeId      String?
+  reportId       String
+  ownerId        String
+  frequency      ReportScheduleFrequency
+  cronExpression String?
+  timezone       String                  @default("Asia/Kolkata")
+  nextRunAt      DateTime?
+  lastRunAt      DateTime?
+  active         Boolean                 @default(true)
+  delivery       Json?
+  metadata       Json?
+  createdById    String
+  updatedById    String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([collegeId])
+  @@index([reportId])
+  @@index([ownerId])
+  @@index([active])
+  @@index([nextRunAt])
+}
+
+model SavedDashboard {
+  id          String   @id @default(cuid())
+  collegeId   String?
+  ownerId     String
+  name        String
+  layout      Json
+  filters     Json?
+  isDefault   Boolean  @default(false)
+  createdById String
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([collegeId])
+  @@index([ownerId])
+  @@index([isDefault])
+}
+
+model SavedFilter {
+  id          String   @id @default(cuid())
+  collegeId   String?
+  ownerId     String
+  name        String
+  context     String
+  filters     Json
+  createdById String
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([collegeId])
+  @@index([ownerId])
+  @@index([context])
+}
+
+model AnalyticsInsight {
+  id               String        @id @default(cuid())
+  collegeId        String?
+  scope            String
+  assessmentId     String?
+  subjectId        String?
+  title            String
+  summary          String
+  recommendation   String?
+  confidence       Float?
+  source           String        @default("rule-based")
+  aggregatePayload Json?
+  status           InsightStatus @default(PENDING_REVIEW)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNote       String?
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([collegeId])
+  @@index([scope])
+  @@index([assessmentId])
+  @@index([subjectId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model StudentPerformanceSnapshot {
+  id           String   @id @default(cuid())
+  collegeId    String
+  studentId    String
+  subjectId    String?
+  assessmentId String?
+  snapshotDate DateTime
+  metrics      Json
+  createdAt    DateTime @default(now())
+
+  @@index([collegeId, studentId])
+  @@index([subjectId])
+  @@index([assessmentId])
+  @@index([snapshotDate])
+}
+
+model AssessmentPerformanceSnapshot {
+  id           String   @id @default(cuid())
+  collegeId    String
+  assessmentId String
+  snapshotDate DateTime
+  metrics      Json
+  createdAt    DateTime @default(now())
+
+  @@index([collegeId, assessmentId])
+  @@index([snapshotDate])
+}
+
+model QuestionPerformanceSnapshot {
+  id                 String              @id @default(cuid())
+  collegeId          String?
+  questionId         String
+  assessmentId       String?
+  approvedDifficulty QuestionDifficulty?
+  measuredDifficulty QuestionDifficulty?
+  measuredAt         DateTime?
+  sampleSize         Int                 @default(0)
+  metrics            Json
+  createdAt          DateTime            @default(now())
+
+  @@index([collegeId])
+  @@index([questionId])
+  @@index([assessmentId])
+  @@index([measuredAt])
+  @@index([sampleSize])
+}
+
+model LeaderboardSnapshot {
+  id           String    @id @default(cuid())
+  collegeId    String?
+  scope        String
+  assessmentId String?
+  subjectId    String?
+  batchId      String?
+  policy       Json
+  entries      Json
+  generatedAt  DateTime  @default(now())
+  expiresAt    DateTime?
+  createdById  String?
+
+  @@index([collegeId])
+  @@index([scope])
+  @@index([assessmentId])
+  @@index([subjectId])
+  @@index([batchId])
+  @@index([generatedAt])
+}
+
+model BenchmarkSnapshot {
+  id         String   @id @default(cuid())
+  collegeId  String?
+  dimension  String
+  groupKey   String
+  metricDate DateTime
+  metrics    Json
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([collegeId])
+  @@index([dimension])
+  @@index([groupKey])
+  @@index([metricDate])
+}
+
+model ExportAudit {
+  id           String             @id @default(cuid())
+  collegeId    String?
+  userId       String
+  reportFileId String?
+  reportJobId  String?
+  reportType   String
+  format       ReportOutputFormat
+  action       String             @default("DOWNLOAD")
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+
+  @@index([collegeId])
+  @@index([userId])
+  @@index([reportFileId])
+  @@index([reportJobId])
+  @@index([createdAt])
 }
 
 model AiGenerationRequest {

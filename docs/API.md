@@ -104,3 +104,8 @@ Key routes:
 - `GET|POST|PATCH /api/v1/syllabi`
 
 AI and imported questions are review-first and save to the existing Question Bank as `DRAFT`.
+# Phase 14 Analytics And Reports
+
+Phase 14 adds protected endpoints for platform, college, faculty, student, assessment, question, subject, topic, comparison, leaderboard, report, and AI-insight analytics under `/api/v1/analytics`, `/api/v1/reports`, `/api/v1/report-jobs`, `/api/v1/report-files`, `/api/v1/assessments/:id/analytics`, and `/api/v1/questions/:id/analytics`.
+
+Swagger at `/api/docs` documents the controller methods. See `docs/ANALYTICS.md`, `docs/REPORTS.md`, `docs/LEADERBOARDS.md`, and `docs/AI_INSIGHTS.md` for formulas and security notes.

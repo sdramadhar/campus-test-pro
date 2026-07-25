@@ -237,6 +237,14 @@ async function main(): Promise<void> {
       mustGet(sessions, "FACULTY"),
       studentSession,
     );
+    await runAnalyticsReportingTests(
+      baseUrl,
+      app.get(PrismaService),
+      mustGet(sessions, "SUPER_ADMIN"),
+      adminSession,
+      mustGet(sessions, "FACULTY"),
+      studentSession,
+    );
 
     console.log("Auth integration tests passed.");
   } finally {
@@ -2119,13 +2127,14 @@ async function runAiWorkflowTests(
     "document validation report endpoint works",
   );
 
+  const promptName = `Phase 13 rollback prompt ${Date.now()}`;
   const prompt = await jsonRequest<Record<string, unknown>>(
     baseUrl,
     "/api/v1/ai/prompts",
     adminSession.cookie,
     "POST",
     {
-      name: "Phase 13 rollback prompt",
+      name: promptName,
       featureType: "QUESTION_GENERATION",
       systemInstruction: "Initial system prompt",
       userPromptTemplate: "Initial {{topic}} prompt",
@@ -2157,6 +2166,195 @@ async function runAiWorkflowTests(
     ),
     201,
     "admin rolls back prompt version",
+  );
+}
+
+async function runAnalyticsReportingTests(
+  baseUrl: string,
+  prisma: PrismaService,
+  superAdminSession: TestSession,
+  adminSession: TestSession,
+  facultySession: TestSession,
+  studentSession: TestSession,
+): Promise<void> {
+  const adminCollegeId = adminSession.body.user.collegeId;
+  assert(Boolean(adminCollegeId), "admin session has college scope");
+  const assessment = await prisma.assessment.findFirstOrThrow({
+    where: { id: "seed-assessment-active-phase7" },
+  });
+  const question = await prisma.question.findFirstOrThrow({
+    where: { collegeId: adminCollegeId ?? "" },
+  });
+  const studentProfile = await prisma.studentProfile.findFirstOrThrow({
+    where: { collegeId: adminCollegeId ?? "" },
+  });
+
+  const platform = await getObject(
+    baseUrl,
+    "/api/v1/analytics/platform",
+    superAdminSession.cookie,
+  );
+  assert(
+    Number((platform.totals as Record<string, unknown>).totalColleges) >= 1,
+    "platform analytics returns real college count",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/analytics/platform`, {
+      headers: { Cookie: studentSession.cookie },
+    }),
+    403,
+    "student cannot access platform analytics",
+  );
+
+  const college = await getObject(
+    baseUrl,
+    "/api/v1/analytics/college",
+    adminSession.cookie,
+  );
+  const rates = college.rates as Record<string, unknown>;
+  assert(
+    typeof rates.participationRate === "number" &&
+      typeof rates.completionRate === "number" &&
+      typeof rates.averageScore === "number" &&
+      typeof rates.passPercentage === "number",
+    "college analytics returns participation, completion, average, and pass rates",
+  );
+
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/analytics/faculty`, {
+      headers: { Cookie: facultySession.cookie },
+    }),
+    200,
+    "faculty analytics is available",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/analytics/student`, {
+      headers: { Cookie: studentSession.cookie },
+    }),
+    200,
+    "student analytics is available",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/students/${studentProfile.id}/analytics`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "authorized student report analytics works",
+  );
+
+  const assessmentAnalytics = await getObject(
+    baseUrl,
+    `/api/v1/assessments/${assessment.id}/analytics`,
+    facultySession.cookie,
+  );
+  assert(
+    Boolean(assessmentAnalytics.scores) &&
+      Boolean(assessmentAnalytics.formulae),
+    "assessment analytics returns score statistics and documented formulae",
+  );
+
+  const questionAnalytics = await getObject(
+    baseUrl,
+    `/api/v1/questions/${question.id}/analytics`,
+    facultySession.cookie,
+  );
+  assert(
+    "measuredDifficulty" in questionAnalytics &&
+      "lowSampleWarning" in questionAnalytics,
+    "question analytics returns measured difficulty and low-sample warning",
+  );
+
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/analytics/subjects`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "subject analytics endpoint works",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/analytics/topics`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "topic analytics endpoint works",
+  );
+
+  const comparison = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/analytics/compare",
+    adminSession.cookie,
+    "POST",
+    { dimension: "subject", metric: "averageScore" },
+    201,
+    "comparison analytics works",
+  );
+  assert(Array.isArray(comparison.rows), "comparison analytics returns rows");
+
+  const leaderboard = await getObject(
+    baseUrl,
+    `/api/v1/assessments/${assessment.id}/leaderboard`,
+    adminSession.cookie,
+  );
+  assert(
+    Array.isArray(leaderboard.entries),
+    "leaderboard returns published rank entries",
+  );
+
+  const report = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/reports",
+    adminSession.cookie,
+    "POST",
+    {
+      name: "Integration Formula Report",
+      reportType: "assessment-results",
+      columns: ["=unsafe", "percentage", "passStatus"],
+      outputFormat: "CSV",
+    },
+    201,
+    "saved report is created",
+  );
+  const run = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    `/api/v1/reports/${String(report.id)}/run`,
+    adminSession.cookie,
+    "POST",
+    { outputFormat: "CSV" },
+    201,
+    "report generation job completes",
+  );
+  const file = run.file as Record<string, unknown>;
+  const download = await fetch(
+    `${baseUrl}/api/v1/report-files/${String(file.id)}/download`,
+    { headers: { Cookie: adminSession.cookie } },
+  );
+  assertEqual(download.status, 200, "report download works");
+  const csv = await download.text();
+  assert(!csv.includes("passwordHash"), "report export excludes password hashes");
+  const audit = await prisma.exportAudit.findFirst({
+    where: { reportFileId: String(file.id), userId: adminSession.body.user.id },
+  });
+  assert(Boolean(audit), "report download creates export audit");
+
+  const insightResponse = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/analytics/insights/generate",
+    adminSession.cookie,
+    "POST",
+    {},
+    201,
+    "analytics insight generation works",
+  );
+  const insight = insightResponse.insight as Record<string, unknown>;
+  await expectStatus(
+    patchJsonWithCookie(
+      baseUrl,
+      `/api/v1/analytics/insights/${String(insight.id)}/review`,
+      adminSession.cookie,
+      { status: "USEFUL", reviewNote: "Reviewed in integration test." },
+    ),
+    200,
+    "analytics insight review works",
   );
 }
 
@@ -2282,6 +2480,24 @@ async function getList(
   const body = (await response.json()) as {
     data: Array<Record<string, unknown>>;
   };
+  return body.data;
+}
+
+async function getObject(
+  baseUrl: string,
+  path: string,
+  cookie: string,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { Cookie: cookie },
+  });
+  if (!response.ok) {
+    throw new Error(`Assertion failed: get ${path}. ${await response.text()}`);
+  }
+  const body = (await response.json()) as {
+    data: Record<string, unknown>;
+  };
+  assert(Boolean(body.data), `get ${path} returned data`);
   return body.data;
 }
 

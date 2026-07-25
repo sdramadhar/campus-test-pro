@@ -49,3 +49,8 @@ Phase 11 adds tables for:
 - `AssessmentBlueprint`
 
 These records are college-scoped where applicable and link back to existing users, subjects, questions, and assessments. Approved AI/import candidates create existing `Question` rows with `QuestionStatus.DRAFT`.
+# Phase 14 Analytics Data
+
+Phase 14 adds analytics metadata tables rather than duplicating raw answer payloads: `AnalyticsSnapshot`, `AnalyticsAggregationJob`, `ReportDefinition`, `ReportGenerationJob`, `ReportFile`, `ReportSchedule`, `SavedDashboard`, `SavedFilter`, `AnalyticsInsight`, `StudentPerformanceSnapshot`, `AssessmentPerformanceSnapshot`, `QuestionPerformanceSnapshot`, `LeaderboardSnapshot`, `BenchmarkSnapshot`, and `ExportAudit`.
+
+Raw attempts, answers, results, questions, assignments, and AI usage remain the source of truth. Snapshot tables are indexed by tenant, assessment, student, question, status, and date where appropriate.

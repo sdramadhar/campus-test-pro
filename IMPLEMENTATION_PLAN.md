@@ -182,6 +182,19 @@
 - Seed a completed demo AI batch generation and a generated AI paper set for Demo College.
 - Add integration tests for batch generation, retry/progress, paper generation, random sets, answer generation, analytics, validation report, and prompt rollback.
 
+## Phase 14 - Advanced Analytics, Reporting, Dashboards, Exports, Leaderboards, AI Insights, and Performance Intelligence
+
+- Add a dedicated `AnalyticsModule` with tenant-scoped service helpers, reusable date-range validation, Redis-backed cacheable summaries, server-side aggregation queries, report generation, report download audit, and Swagger-documented controllers.
+- Add Prisma persistence for analytics snapshots, aggregation jobs, report definitions, report jobs, report files, report schedules, saved dashboards, saved filters, analytics insights, performance snapshots, leaderboard snapshots, benchmark snapshots, and export audits.
+- Add Super Admin, College Admin, Faculty, Student, assessment, question, subject, topic, syllabus, comparison, leaderboard, report, and insight analytics APIs under `/api/v1`.
+- Add role-aware frontend routes for platform analytics, admin analytics/reports, faculty analytics, student analytics/report cards, subject/topic analytics, comparison, assessment analytics/reports/leaderboards, question analytics, saved reports, report jobs, report builder, leaderboards, and AI insights.
+- Add real score aggregation for participation, completion, average, median, pass percentage, score distribution, section summary, question accuracy, measured difficulty, low-sample warnings, topic coverage, and published-only leaderboard ranking.
+- Add CSV report generation with formula-injection protection, expiring report metadata, download auditing, and seeded report/job/file/schedule examples.
+- Add cautious AI insight foundations using aggregate-only payloads, human-review status, useful/dismissed review actions, and disabled-by-default predictive analytics warnings.
+- Seed analytics snapshots, report definitions, report jobs/files/schedules, leaderboard snapshots, insights, performance snapshots, benchmarks, and export audit data for Demo College.
+- Add integration tests for platform authorization, tenant-scoped college analytics, faculty/student analytics, assessment analytics, question analytics, subject/topic analytics, comparisons, leaderboard ranking, report generation/download audit, and insight review.
+- Add analytics, reports, leaderboards, AI insights, performance, privacy, and report-security documentation.
+
 ## Verification
 
 - Install dependencies.
@@ -195,3 +208,4 @@
 - For Phase 11, also verify `/questions/ai-generate`, `/questions/ai-jobs`, `/questions/import-document`, `/admin/ai/prompts`, `/admin/ai/usage`, `/academic/syllabi`, Swagger, and the mock-provider review workflow.
 - For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.
 - For Phase 13, also verify `/questions/ai-batch`, `/assessments/ai-paper`, `/assessments/random-sets`, batch progress/cancel/retry APIs, generated paper-set APIs, model-answer APIs, prompt rollback, validation reports, question analytics, notifications, Swagger, and worker/API readiness.
+- For Phase 14, also verify `/super-admin/analytics`, `/admin/analytics`, `/faculty/analytics`, `/student/analytics`, `/analytics/compare`, `/leaderboards`, `/reports/builder`, `/reports/jobs`, `/analytics/insights`, analytics/report APIs, report download audit, leaderboard policy, AI insight review, and the predictive analytics limitations notice.

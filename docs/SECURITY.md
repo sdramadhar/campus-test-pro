@@ -17,3 +17,8 @@
 # Phase 11 AI Security Notes
 
 AI workflows keep provider secrets on the server, reject mock provider mode in production, sanitize provider errors, validate provider JSON, and treat imported document content as untrusted data. Duplicate detection is advisory only. See `docs/AI_SECURITY.md` and `docs/AI_PRIVACY.md`.
+# Phase 14 Analytics Security
+
+Analytics and reporting endpoints use JWT authentication, role guards, tenant scoping, faculty assignment checks, published-result restrictions for student views, expiring report files, and export audit logging. CSV output escapes formula-leading values. AI insights use aggregate payloads and are labelled as suggestions requiring human review.
+
+See `docs/ANALYTICS_PRIVACY.md` and `docs/REPORT_SECURITY.md` for the detailed privacy and report download controls.
