@@ -96,6 +96,15 @@ export class AiQuestionsController extends AiBaseController {
     return this.service.updateGeneratedQuestion(user, jobId, resultId, dto);
   }
 
+  @Get("jobs/:jobId/results/:resultId/versions")
+  versions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("jobId") jobId: string,
+    @Param("resultId") resultId: string,
+  ) {
+    return this.service.resultVersions(user, jobId, resultId);
+  }
+
   @Post("jobs/:jobId/approve")
   approve(
     @CurrentUser() user: AuthenticatedUser,

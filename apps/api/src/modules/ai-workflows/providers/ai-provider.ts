@@ -55,12 +55,18 @@ export interface AiProviderRequest {
   language: string;
   syllabusText?: string;
   sourceNotes?: string;
+  systemPrompt?: string;
+  userPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+  model?: string;
 }
 
 export interface AiProvider {
   readonly name: string;
   readonly model: string;
   generateQuestions(request: AiProviderRequest): Promise<AiProviderResponse>;
+  embedText?(texts: string[]): Promise<number[][]>;
 }
 
 export class AiProviderError extends Error {

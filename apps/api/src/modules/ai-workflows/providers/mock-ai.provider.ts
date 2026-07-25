@@ -52,6 +52,10 @@ export class MockAiProvider implements AiProvider {
     });
   }
 
+  embedText(texts: string[]): Promise<number[][]> {
+    return Promise.resolve(texts.map((text) => this.embedding(text)));
+  }
+
   private questionText(stem: string, type: QuestionType): string {
     if (type === QuestionType.TRUE_FALSE) {
       return `${stem}. State whether the concept is applied correctly.`;
@@ -100,5 +104,20 @@ export class MockAiProvider implements AiProvider {
       return { publicTests: [{ input: "sample", expectedOutput: "sample" }] };
     }
     return "A";
+  }
+
+  private embedding(text: string): number[] {
+    const values = Array.from({ length: 48 }, () => 0);
+    for (const token of text.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+      let hash = 2166136261;
+      for (const char of token) {
+        hash ^= char.charCodeAt(0);
+        hash = Math.imul(hash, 16777619);
+      }
+      const target = Math.abs(hash) % values.length;
+      values[target] = (values[target] ?? 0) + 1;
+    }
+    const magnitude = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0));
+    return magnitude === 0 ? values : values.map((value) => value / magnitude);
   }
 }

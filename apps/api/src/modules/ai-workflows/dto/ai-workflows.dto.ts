@@ -123,6 +123,27 @@ export class GenerateQuestionsDto {
   @IsOptional()
   @IsString()
   promptTemplateId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  temperature?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  @Max(8000)
+  maxTokens?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  model?: string;
 }
 
 export class AiJobListQueryDto {
@@ -234,6 +255,27 @@ export class PromptTemplateDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  temperature?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  @Max(8000)
+  maxTokens?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  model?: string;
 }
 
 export class ImportDocumentDto {
@@ -264,6 +306,11 @@ export class ImportDocumentDto {
   @ApiProperty()
   @IsString()
   content!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contentEncoding?: string;
 }
 
 export class DuplicateCheckDto {

@@ -1366,7 +1366,17 @@ async function main(): Promise<void> {
       userPromptTemplate:
         "Create {{count}} {{questionType}} questions for {{topic}} at {{difficulty}} difficulty.",
       variables: ["count", "questionType", "topic", "difficulty", "bloomLevel"],
-      providerCompatibility: ["mock", "openai", "gemini", "anthropic"],
+      providerCompatibility: [
+        "mock",
+        "openai",
+        "gemini",
+        "anthropic",
+        "azure-openai",
+        "ollama",
+      ],
+      temperature: 0.2,
+      maxTokens: 1200,
+      model: "campustest-mock-v1",
       active: true,
       createdById: collegeAdmin.id,
       updatedById: collegeAdmin.id,

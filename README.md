@@ -217,7 +217,7 @@ Phase 8 seed data adds an expired attempt for auto-submit recovery, job records,
 
 Phase 10 seed data adds Demo College admin settings, admin-panel notifications, activity-history records, and a development permission override.
 
-Phase 11 AI workflow routes:
+Phase 11/12 AI workflow routes:
 
 - `POST /api/v1/ai/questions/generate`
 - `GET /api/v1/ai/jobs`
@@ -227,6 +227,7 @@ Phase 11 AI workflow routes:
 - `POST /api/v1/ai/jobs/:jobId/approve`
 - `POST /api/v1/ai/jobs/:jobId/reject`
 - `POST /api/v1/ai/jobs/:jobId/save-approved`
+- `GET /api/v1/ai/jobs/:jobId/results/:resultId/versions`
 - `GET|POST|PATCH|DELETE /api/v1/ai/prompts`
 - `GET /api/v1/ai/usage`
 - `GET|PATCH /api/v1/ai/settings`
@@ -239,7 +240,7 @@ Phase 11 AI workflow routes:
 - `GET|POST|PATCH /api/v1/syllabi`
 - `GET /api/v1/syllabi/:id/coverage`
 
-Phase 11 frontend routes:
+Phase 11/12 frontend routes:
 
 - `/questions/ai-generate`
 - `/questions/ai-jobs`
@@ -254,7 +255,17 @@ Phase 11 frontend routes:
 - `/academic/syllabi`
 - `/academic/syllabi/[id]/coverage`
 
-AI defaults are development-only. `AI_PROVIDER=mock` creates deterministic sample questions for local testing and is rejected in production. AI output and document-extracted candidates must be reviewed by a human and are saved into the Question Bank as `DRAFT`, never as active questions.
+AI defaults are development-only. `AI_PROVIDER=mock` creates deterministic sample questions for local testing and is rejected in production. Real provider adapters are available for `openai`, `gemini`, `anthropic`, `azure-openai`, and `ollama`; keys and endpoints are read only from server environment variables. AI output and document-extracted candidates must be reviewed by a human and are saved into the Question Bank as `DRAFT`, never as active questions.
+
+Phase 12 AI/OCR environment variables:
+
+- `AI_PROVIDER`, `AI_MODEL`, `AI_TEMPERATURE`, `AI_MAX_OUTPUT_TOKENS`, `AI_EMBEDDING_MODEL`
+- `OPENAI_API_KEY`, `GOOGLE_GEMINI_API_KEY`, `ANTHROPIC_API_KEY`
+- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`
+- `OLLAMA_BASE_URL`
+- `OCR_PROVIDER=none|tesseract`, `TESSERACT_BINARY_PATH`
+
+Document import accepts TXT, Markdown, CSV, text PDF, DOCX, XLSX, PNG, and JPG payloads. Images and scanned PDFs require Tesseract OCR; when OCR is not configured they are stored as `OCR_REQUIRED` jobs for later processing.
 
 Coding questions store test cases and hidden-case metadata, but CampusTest Pro does not execute untrusted code yet. Browser exam events are review signals only; they do not automatically declare misconduct.
 

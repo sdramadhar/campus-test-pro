@@ -151,6 +151,21 @@
 - Add protected frontend routes for AI generation, jobs, review, document import, admin AI prompts/usage/settings, and syllabi.
 - Add integration tests for mock generation, student rejection, review gate, DRAFT save, document import, duplicates, syllabus coverage, and AI usage/settings.
 
+## Phase 12 - AI Provider and OCR Integration
+
+- Replace external AI placeholders with real server-side adapters for OpenAI, Google Gemini, Anthropic Claude, Azure OpenAI, and local Ollama.
+- Keep provider/model switching configuration-driven through `AI_PROVIDER`, `AI_MODEL`, provider-specific API key variables, Azure deployment variables, and Ollama base URL.
+- Add prompt runtime settings for temperature, max output tokens, model override, provider compatibility, prompt versions, and review history.
+- Add Tesseract OCR integration behind an OCR abstraction, with images and scanned PDFs marked `OCR_REQUIRED` when OCR is disabled or unavailable.
+- Expand document import support for PDF, DOCX, XLSX, TXT, Markdown, CSV, PNG, and JPG inputs through parser/OCR metadata.
+- Add structured question detection for MCQ, true/false, fill-in-the-blank, coding, short-answer, and descriptive candidates.
+- Add automatic advisory classification for Bloom taxonomy, difficulty, marks, topic, chapter, and source metadata.
+- Add embedding-backed duplicate detection with semantic score, fuzzy score, provider/model metadata, and local deterministic fallback for dev/test.
+- Add AI generated-result version records and an API endpoint for human-review comparison after edits.
+- Store embeddings for approved AI/imported questions saved into the Question Bank as `DRAFT`.
+- Expand AI usage/settings dashboard data with provider status, token totals, cost totals, failed jobs, provider failures, and generation statistics.
+- Add integration tests for runtime prompt settings, result versions, semantic duplicate metadata, document classification, OCR-required image imports, and admin AI usage/settings.
+
 ## Verification
 
 - Install dependencies.
@@ -162,3 +177,4 @@
 - For Phase 9, also verify `/api/v1/system/version`, password reset, email development delivery, worker heartbeat, maintenance mode, and production Docker build validation where the local Docker runtime allows it.
 - For Phase 10, also verify `/admin`, `/admin/students`, `/admin/faculty`, `/admin/departments`, `/admin/subjects`, `/admin/semesters`, `/admin/batches`, `/admin/college-settings`, `/admin/permissions`, `/admin/profile`, `/admin/notifications`, `/admin/audit-logs`, `/admin/activity`, and the `/api/v1/admin-panel/*` endpoints.
 - For Phase 11, also verify `/questions/ai-generate`, `/questions/ai-jobs`, `/questions/import-document`, `/admin/ai/prompts`, `/admin/ai/usage`, `/academic/syllabi`, Swagger, and the mock-provider review workflow.
+- For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.

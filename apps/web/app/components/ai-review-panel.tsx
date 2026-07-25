@@ -95,6 +95,7 @@ export function AiReviewPanel({ jobId }: { jobId: string }) {
               <span>Bloom: {valueText(result.suggestedBloomLevel)}</span>
               <span>Marks: {valueText(result.marks)}</span>
               <span>Duplicate: {result.duplicateCandidate ? "Possible" : "No"}</span>
+              <span>Versions: {Array.isArray(result.versions) ? result.versions.length : 0}</span>
             </div>
             {Boolean(result.duplicateCandidate) && (
               <div className="form-alert">

@@ -363,6 +363,7 @@ model User {
   permissionOverrides      UserPermissionOverride[]
   aiGenerationJobs         AiGenerationJob[]        @relation("AiGenerationRequestedBy")
   aiReviewDecisions        AiReviewDecision[]       @relation("AiReviewDecidedBy")
+  aiResultVersionsEdited   AiGenerationResultVersion[] @relation("AiResultVersionEditedBy")
   aiPromptTemplatesCreated AiPromptTemplate[]       @relation("AiPromptCreatedBy")
   aiPromptTemplatesUpdated AiPromptTemplate[]       @relation("AiPromptUpdatedBy")
   documentImportJobs       DocumentImportJob[]      @relation("DocumentImportRequestedBy")
@@ -424,6 +425,7 @@ model College {
   documentImportJobs   DocumentImportJob[]
   importedDocuments    ImportedDocument[]
   duplicateCandidates  QuestionDuplicateCandidate[]
+  questionEmbeddings   QuestionEmbedding[]
   syllabi              Syllabus[]
   assessmentBlueprints AssessmentBlueprint[]
   createdAt            DateTime                     @default(now())
@@ -838,6 +840,7 @@ model Question {
   extractedCandidates  ExtractedQuestionCandidate[]
   duplicateMatches     QuestionDuplicateCandidate[] @relation("DuplicateExistingQuestion")
   duplicateNewMatches  QuestionDuplicateCandidate[] @relation("DuplicateNewQuestion")
+  embeddings           QuestionEmbedding[]
   answers              Answer[]
   createdAt            DateTime                     @default(now())
   updatedAt            DateTime                     @updatedAt
@@ -1603,6 +1606,9 @@ model AiGenerationRequest {
   promptVariables     Json?
   promptPreview       String?
   sanitizedPromptHash String?
+  runtimeModel        String?
+  temperature         Float?
+  maxTokens           Int?
   createdAt           DateTime        @default(now())
 }
 
@@ -1638,6 +1644,7 @@ model AiGenerationResult {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   decisions           AiReviewDecision[]
+  versions            AiGenerationResultVersion[]
 
   @@index([jobId])
   @@index([questionId])
@@ -1661,6 +1668,22 @@ model AiReviewDecision {
   @@index([jobId])
   @@index([resultId])
   @@index([reviewerId])
+}
+
+model AiGenerationResultVersion {
+  id            String             @id @default(cuid())
+  resultId      String
+  result        AiGenerationResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  editedById    String
+  editedBy      User               @relation("AiResultVersionEditedBy", fields: [editedById], references: [id], onDelete: Cascade)
+  beforeState   Json
+  afterState    Json
+  createdAt     DateTime           @default(now())
+
+  @@unique([resultId, versionNumber])
+  @@index([resultId])
+  @@index([editedById])
 }
 
 model AiUsageRecord {
@@ -1700,6 +1723,9 @@ model AiPromptTemplate {
   version               Int                 @default(1)
   active                Boolean             @default(true)
   providerCompatibility String[]
+  temperature           Float               @default(0.2)
+  maxTokens             Int                 @default(1200)
+  model                 String?
   createdById           String?
   createdBy             User?               @relation("AiPromptCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedById           String?
@@ -1747,6 +1773,10 @@ model DocumentImportJob {
   sizeBytes        Int
   storageKey       String
   sourceKind       String
+  parserProvider   String?
+  ocrProvider      String?
+  ocrAttempted     Boolean                      @default(false)
+  ocrConfidence    Float?
   extractedChars   Int                          @default(0)
   candidateCount   Int                          @default(0)
   approvedCount    Int                          @default(0)
@@ -1854,6 +1884,10 @@ model QuestionDuplicateCandidate {
   normalizedQuestionHash String
   similarityScore        Float
   duplicateReason        String
+  semanticScore          Float?
+  fuzzyScore             Float?
+  embeddingProvider      String?
+  embeddingModel         String?
   reviewedStatus         DuplicateReviewStatus @default(PENDING)
   reviewerId             String?
   reviewedAt             DateTime?
@@ -1866,6 +1900,24 @@ model QuestionDuplicateCandidate {
   @@index([existingQuestionId])
   @@index([normalizedQuestionHash])
   @@index([reviewedStatus])
+}
+
+model QuestionEmbedding {
+  id             String    @id @default(cuid())
+  collegeId      String
+  college        College   @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  questionId     String?
+  question       Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  sourceTextHash String
+  provider       String
+  model          String
+  vector         Json
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+
+  @@unique([sourceTextHash, provider, model])
+  @@index([collegeId])
+  @@index([questionId])
 }
 
 model Syllabus {

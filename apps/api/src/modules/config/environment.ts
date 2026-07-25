@@ -55,11 +55,14 @@ export const environmentSchema = z
     CODE_RUNNER_INTERNAL_URL: z.string().optional(),
     AI_FEATURE_ENABLED: z.enum(["true", "false"]).default("true"),
     AI_PROVIDER: z
-      .enum(["mock", "openai", "gemini", "anthropic"])
+      .enum(["mock", "openai", "gemini", "anthropic", "azure-openai", "ollama"])
       .default("mock"),
     AI_ALLOW_MOCK_IN_NON_PRODUCTION: z.enum(["true", "false"]).default("true"),
     AI_API_KEY: z.string().optional(),
     AI_MODEL: z.string().default("campustest-mock-v1"),
+    AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+    AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(1200),
+    AI_EMBEDDING_MODEL: z.string().default("text-embedding-3-small"),
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
     AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
     AI_DAILY_LIMIT: z.coerce.number().int().positive().default(100),
@@ -67,7 +70,16 @@ export const environmentSchema = z
     AI_MAX_QUESTIONS_PER_REQUEST: z.coerce.number().int().positive().default(10),
     AI_DOCUMENT_MAX_BYTES: z.coerce.number().int().positive().default(5242880),
     AI_DOCUMENT_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
-    OCR_PROVIDER: z.string().optional(),
+    OPENAI_API_KEY: z.string().optional(),
+    GOOGLE_GEMINI_API_KEY: z.string().optional(),
+    ANTHROPIC_API_KEY: z.string().optional(),
+    AZURE_OPENAI_API_KEY: z.string().optional(),
+    AZURE_OPENAI_ENDPOINT: z.string().optional(),
+    AZURE_OPENAI_DEPLOYMENT: z.string().optional(),
+    AZURE_OPENAI_API_VERSION: z.string().default("2024-02-15-preview"),
+    OLLAMA_BASE_URL: z.string().default("http://localhost:11434"),
+    OCR_PROVIDER: z.enum(["none", "tesseract"]).default("none"),
+    TESSERACT_BINARY_PATH: z.string().default("tesseract"),
     SWAGGER_ENABLED: z.enum(["true", "false"]).default("true"),
     MAINTENANCE_MODE: z.enum(["true", "false"]).default("false"),
     ALLOW_ADMIN_DURING_MAINTENANCE: z.enum(["true", "false"]).default("true"),
@@ -134,12 +146,28 @@ export const environmentSchema = z
       if (
         env.AI_FEATURE_ENABLED === "true" &&
         env.AI_PROVIDER !== "mock" &&
-        !env.AI_API_KEY
+        env.AI_PROVIDER !== "ollama" &&
+        !env.AI_API_KEY &&
+        !env.OPENAI_API_KEY &&
+        !env.GOOGLE_GEMINI_API_KEY &&
+        !env.ANTHROPIC_API_KEY &&
+        !env.AZURE_OPENAI_API_KEY
       ) {
         ctx.addIssue({
           code: "custom",
           path: ["AI_API_KEY"],
           message: "Configured AI provider requires a server-side API key.",
+        });
+      }
+      if (
+        env.AI_FEATURE_ENABLED === "true" &&
+        env.AI_PROVIDER === "azure-openai" &&
+        (!env.AZURE_OPENAI_ENDPOINT || !env.AZURE_OPENAI_DEPLOYMENT)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["AZURE_OPENAI_ENDPOINT"],
+          message: "Azure OpenAI requires endpoint and deployment env vars.",
         });
       }
       if (env.EMAIL_PROVIDER !== "console" && !env.EMAIL_FROM) {

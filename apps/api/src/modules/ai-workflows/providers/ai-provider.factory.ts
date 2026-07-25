@@ -1,28 +1,14 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { env } from "../../config/environment";
+import { AiProvider, AiProviderError } from "./ai-provider";
 import {
-  AiProvider,
-  AiProviderError,
-  AiProviderRequest,
-  AiProviderResponse,
-} from "./ai-provider";
+  AnthropicProvider,
+  AzureOpenAiProvider,
+  GeminiProvider,
+  OllamaProvider,
+  OpenAiProvider,
+} from "./external-ai.providers";
 import { MockAiProvider } from "./mock-ai.provider";
-
-class ExternalProviderPlaceholder implements AiProvider {
-  constructor(
-    readonly name: string,
-    readonly model: string,
-  ) {}
-
-  generateQuestions(request: AiProviderRequest): Promise<AiProviderResponse> {
-    void request;
-    throw new AiProviderError(
-      "The configured AI provider adapter is not enabled in this build.",
-      "PROVIDER_NOT_CONFIGURED",
-      false,
-    );
-  }
-}
 
 @Injectable()
 export class AiProviderFactory {
@@ -47,12 +33,37 @@ export class AiProviderFactory {
     if (current.AI_PROVIDER === "mock") {
       return new MockAiProvider(current.AI_MODEL);
     }
-    if (!current.AI_API_KEY) {
-      throw new ServiceUnavailableException(
-        "AI provider is missing a server-side API key.",
-      );
+    if (current.AI_PROVIDER === "openai") {
+      return new OpenAiProvider({
+        apiKey: current.OPENAI_API_KEY ?? current.AI_API_KEY,
+        model: current.AI_MODEL,
+      });
     }
-    return new ExternalProviderPlaceholder(current.AI_PROVIDER, current.AI_MODEL);
+    if (current.AI_PROVIDER === "gemini") {
+      return new GeminiProvider({
+        apiKey: current.GOOGLE_GEMINI_API_KEY ?? current.AI_API_KEY,
+        model: current.AI_MODEL,
+      });
+    }
+    if (current.AI_PROVIDER === "anthropic") {
+      return new AnthropicProvider({
+        apiKey: current.ANTHROPIC_API_KEY ?? current.AI_API_KEY,
+        model: current.AI_MODEL,
+      });
+    }
+    if (current.AI_PROVIDER === "azure-openai") {
+      return new AzureOpenAiProvider({
+        apiKey: current.AZURE_OPENAI_API_KEY ?? current.AI_API_KEY,
+        baseUrl: current.AZURE_OPENAI_ENDPOINT,
+        deployment: current.AZURE_OPENAI_DEPLOYMENT,
+        apiVersion: current.AZURE_OPENAI_API_VERSION,
+        model: current.AI_MODEL,
+      });
+    }
+    return new OllamaProvider({
+      baseUrl: current.OLLAMA_BASE_URL,
+      model: current.AI_MODEL,
+    });
   }
 
   async withTimeoutAndRetry<T>(operation: () => Promise<T>): Promise<T> {
@@ -90,6 +101,14 @@ export class AiProviderFactory {
       featureEnabled: env().AI_FEATURE_ENABLED === "true",
       provider: env().AI_PROVIDER,
       model: env().AI_MODEL,
+      supportedProviders: [
+        "mock",
+        "openai",
+        "gemini",
+        "anthropic",
+        "azure-openai",
+        "ollama",
+      ],
       disabledUntil: this.disabledUntil?.toISOString() ?? null,
     };
   }

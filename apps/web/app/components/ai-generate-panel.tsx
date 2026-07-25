@@ -55,6 +55,9 @@ export function AiGeneratePanel() {
       syllabusText: formText(form, "syllabusText") || undefined,
       sourceNotes: formText(form, "sourceNotes") || undefined,
       avoidDuplicate: form.get("avoidDuplicate") === "on",
+      model: formText(form, "model") || undefined,
+      temperature: Number(formText(form, "temperature") || 0.2),
+      maxTokens: Number(formText(form, "maxTokens") || 1200),
     };
     try {
       const response = await aiRequest<ApiResponse<EntityRecord>>(
@@ -144,6 +147,18 @@ export function AiGeneratePanel() {
         <label>
           Language
           <input defaultValue="English" name="language" />
+        </label>
+        <label>
+          Model override
+          <input name="model" placeholder={valueText(status?.model)} />
+        </label>
+        <label>
+          Temperature
+          <input defaultValue="0.2" max="2" min="0" name="temperature" step="0.1" type="number" />
+        </label>
+        <label>
+          Max tokens
+          <input defaultValue="1200" min="1" name="maxTokens" type="number" />
         </label>
         <label className="check-field">
           <input defaultChecked name="avoidDuplicate" type="checkbox" />

@@ -1801,6 +1801,9 @@ async function runAiWorkflowTests(
       negativeMarks: 0,
       language: "English",
       avoidDuplicate: true,
+      model: "campustest-mock-v1",
+      temperature: 0.3,
+      maxTokens: 900,
     },
     201,
     "faculty creates mock AI generation job",
@@ -1808,6 +1811,17 @@ async function runAiWorkflowTests(
   const jobId = String(generated.id);
   const completedJob = await pollJob(baseUrl, jobId, facultySession.cookie);
   const results = completedJob.results as Array<Record<string, unknown>>;
+  const generationRequest = completedJob.request as Record<string, unknown>;
+  assertEqual(
+    Number(generationRequest.temperature),
+    0.3,
+    "AI generation stores runtime temperature",
+  );
+  assertEqual(
+    Number(generationRequest.maxTokens),
+    900,
+    "AI generation stores runtime max tokens",
+  );
   assert(results.length >= 1, "mock provider generated review results");
   assertEqual(
     String(results[0]?.reviewStatus),
@@ -1816,6 +1830,33 @@ async function runAiWorkflowTests(
   );
 
   const resultId = String(results[0]?.id);
+  await expectStatus(
+    patchJsonWithCookie(
+      baseUrl,
+      `/api/v1/ai/jobs/${jobId}/results/${resultId}`,
+      facultySession.cookie,
+      {
+        questionText: `${String(results[0]?.questionText)} Edited by reviewer.`,
+        approvedDifficulty: "MEDIUM",
+        approvedBloomLevel: "UNDERSTAND",
+        marks: 2,
+      },
+    ),
+    200,
+    "reviewer can edit generated AI output",
+  );
+  const versionsResponse = await fetch(
+    `${baseUrl}/api/v1/ai/jobs/${jobId}/results/${resultId}/versions`,
+    { headers: { Cookie: facultySession.cookie } },
+  );
+  assertEqual(versionsResponse.status, 200, "AI result versions endpoint works");
+  const versionsBody = (await versionsResponse.json()) as {
+    data: Array<Record<string, unknown>>;
+  };
+  assert(
+    versionsBody.data.length >= 1,
+    "AI edit creates version history for comparison",
+  );
   await expectStatus(
     postJsonWithCookie(
       baseUrl,
@@ -1858,6 +1899,11 @@ async function runAiWorkflowTests(
     duplicateBody.data.length >= 1,
     "duplicate detection returns an advisory candidate",
   );
+  assert(
+    "semanticScore" in (duplicateBody.data[0] ?? {}) ||
+      "fuzzyScore" in (duplicateBody.data[0] ?? {}),
+    "duplicate detection returns semantic or fuzzy score metadata",
+  );
 
   const importJob = await jsonRequest<Record<string, unknown>>(
     baseUrl,
@@ -1879,22 +1925,60 @@ async function runAiWorkflowTests(
     "EXTRACTED",
     "TXT import extracts text without OCR",
   );
+  assertEqual(
+    String(importJob.parserProvider),
+    "campustest-structured-parser",
+    "document import records parser provider",
+  );
+  const importCandidates = importJob.candidates as Array<Record<string, unknown>>;
+  assert(
+    importCandidates.some((candidate) => String(candidate.suggestedBloomLevel)),
+    "document import classifies Bloom level",
+  );
 
-  await expectStatus(
-    postJsonWithCookie(
-      baseUrl,
-      "/api/v1/question-imports/documents",
-      facultySession.cookie,
-      {
-        subjectId: subject.id,
-        fileName: "scan.png",
-        mimeType: "image/png",
-        sizeBytes: 64,
-        content: "fake-image",
-      },
+  const markdownImport = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/question-imports/documents",
+    facultySession.cookie,
+    "POST",
+    {
+      subjectId: subject.id,
+      fileName: "coding.md",
+      mimeType: "text/markdown",
+      sizeBytes: 96,
+      content: "## Chapter 1\nQuestion 1: Write code to implement enqueue. 5 marks",
+    },
+    201,
+    "Markdown document import creates candidates",
+  );
+  const markdownCandidates =
+    markdownImport.candidates as Array<Record<string, unknown>>;
+  assert(
+    markdownCandidates.some(
+      (candidate) => String(candidate.questionType) === "CODING",
     ),
+    "document import detects coding questions",
+  );
+
+  const imageJob = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/question-imports/documents",
+    facultySession.cookie,
+    "POST",
+    {
+      subjectId: subject.id,
+      fileName: "scan.png",
+      mimeType: "image/png",
+      sizeBytes: 64,
+      content: "fake-image",
+    },
     201,
     "image import is accepted as OCR-required job",
+  );
+  assertEqual(
+    String(imageJob.status),
+    "OCR_REQUIRED",
+    "image import records OCR-required status when OCR is not configured",
   );
 
   const syllabi = await getList(baseUrl, "/api/v1/syllabi", facultySession.cookie);
@@ -1906,19 +1990,28 @@ async function runAiWorkflowTests(
   );
   assertEqual(coverageResponse.status, 200, "syllabus coverage endpoint works");
 
-  await expectStatus(
-    fetch(`${baseUrl}/api/v1/ai/usage`, {
-      headers: { Cookie: adminSession.cookie },
-    }),
-    200,
-    "admin can view AI usage",
+  const usageResponse = await fetch(`${baseUrl}/api/v1/ai/usage`, {
+    headers: { Cookie: adminSession.cookie },
+  });
+  assertEqual(usageResponse.status, 200, "admin can view AI usage");
+  const usageBody = (await usageResponse.json()) as {
+    data: Record<string, unknown>;
+  };
+  assert(
+    Boolean(usageBody.data.generationStatistics),
+    "AI usage returns generation statistics",
   );
-  await expectStatus(
-    fetch(`${baseUrl}/api/v1/ai/settings`, {
-      headers: { Cookie: adminSession.cookie },
-    }),
-    200,
-    "admin can view AI settings",
+  const settingsResponse = await fetch(`${baseUrl}/api/v1/ai/settings`, {
+    headers: { Cookie: adminSession.cookie },
+  });
+  assertEqual(settingsResponse.status, 200, "admin can view AI settings");
+  const settingsBody = (await settingsResponse.json()) as {
+    data: Record<string, unknown>;
+  };
+  assertEqual(
+    String(settingsBody.data.ocrProvider),
+    "none",
+    "OCR defaults to disabled unless configured",
   );
 }
 
@@ -2091,7 +2184,10 @@ function assertEqual<T>(actual: T, expected: T, label: string): void {
 void main();
 
 async function clearLoginRateKeys(redis: RedisService): Promise<void> {
-  const keys = await redis.client.keys("login-rate:*");
+  const keys = [
+    ...(await redis.client.keys("login-rate:*")),
+    ...(await redis.client.keys("password-reset-rate:*")),
+  ];
   if (keys.length > 0) {
     await redis.client.del(...keys);
   }

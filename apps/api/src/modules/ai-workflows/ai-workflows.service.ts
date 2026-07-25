@@ -7,6 +7,11 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
+import { promises as fs } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   AiDecisionType,
   AiGenerationJobStatus,
@@ -40,6 +45,9 @@ import {
   AiProviderError,
 } from "./providers/ai-provider";
 import { AiProviderFactory } from "./providers/ai-provider.factory";
+import { localSemanticEmbedding } from "./providers/external-ai.providers";
+
+const execFileAsync = promisify(execFile);
 
 const adminRoles = new Set<Role>([Role.SUPER_ADMIN, Role.COLLEGE_ADMIN]);
 const aiUserRoles = new Set<Role>([
@@ -49,11 +57,15 @@ const aiUserRoles = new Set<Role>([
 ]);
 const supportedTextMimeTypes = new Set([
   "text/plain",
+  "text/markdown",
   "text/csv",
   "application/csv",
+  "application/x-markdown",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/pdf",
+  "image/png",
+  "image/jpeg",
 ]);
 
 @Injectable()
@@ -101,7 +113,21 @@ export class AiWorkflowsService {
     }
 
     const provider = this.providerFactory.getProvider();
+    const promptTemplate = dto.promptTemplateId
+      ? await this.prisma.aiPromptTemplate.findFirst({
+          where: {
+            id: dto.promptTemplateId,
+            active: true,
+            OR: [{ collegeId: null }, { collegeId }],
+          },
+        })
+      : null;
     const promptPreview = this.buildPromptPreview(dto, subject.subjectName);
+    const runtimeModel = dto.model ?? promptTemplate?.model ?? provider.model;
+    const temperature =
+      dto.temperature ?? promptTemplate?.temperature ?? env().AI_TEMPERATURE;
+    const maxTokens =
+      dto.maxTokens ?? promptTemplate?.maxTokens ?? env().AI_MAX_OUTPUT_TOKENS;
     const job = await this.prisma.aiGenerationJob.create({
       data: {
         collegeId,
@@ -114,7 +140,7 @@ export class AiWorkflowsService {
         bloomLevel: dto.bloomLevel,
         requestedCount: dto.requestedCount,
         provider: provider.name,
-        model: provider.model,
+        model: runtimeModel,
         estimatedTokens: Math.max(50, promptPreview.length / 4),
         estimatedCostMetadata: { currency: "USD", estimateOnly: true },
         status: AiGenerationJobStatus.QUEUED,
@@ -134,6 +160,9 @@ export class AiWorkflowsService {
             promptTemplateId: dto.promptTemplateId,
             promptPreview,
             sanitizedPromptHash: this.hash(promptPreview),
+            runtimeModel,
+            temperature,
+            maxTokens,
           },
         },
       },
@@ -168,6 +197,27 @@ export class AiWorkflowsService {
   async getJob(user: AuthenticatedUser, jobId: string) {
     this.ensureAiUser(user);
     return { success: true, data: await this.getJobData(user, jobId) };
+  }
+
+  async resultVersions(
+    user: AuthenticatedUser,
+    jobId: string,
+    resultId: string,
+  ) {
+    this.ensureAiUser(user);
+    await this.getScopedJob(user, jobId);
+    const result = await this.prisma.aiGenerationResult.findFirst({
+      where: { id: resultId, jobId },
+    });
+    if (!result) throw new NotFoundException("Generated result not found.");
+    return {
+      success: true,
+      data: await this.prisma.aiGenerationResultVersion.findMany({
+        where: { resultId },
+        orderBy: { versionNumber: "desc" },
+        include: { editedBy: this.safeUserSelect() },
+      }),
+    };
   }
 
   async cancelJob(user: AuthenticatedUser, jobId: string) {
@@ -251,14 +301,26 @@ export class AiWorkflowsService {
         reviewerChanges: { editedBy: user.id, editedAt: new Date().toISOString() },
       },
     });
+    const versionCount = await this.prisma.aiGenerationResultVersion.count({
+      where: { resultId },
+    });
+    await this.prisma.aiGenerationResultVersion.create({
+      data: {
+        resultId,
+        versionNumber: versionCount + 1,
+        editedById: user.id,
+        beforeState: this.toJsonObject(before),
+        afterState: this.toJsonObject(after),
+      },
+    });
     await this.prisma.aiReviewDecision.create({
       data: {
         jobId,
         resultId,
         reviewerId: user.id,
         decision: AiDecisionType.EDIT,
-        beforeState: before,
-        afterState: after,
+        beforeState: this.toJsonObject(before),
+        afterState: this.toJsonObject(after),
       },
     });
     return { success: true, data: after };
@@ -312,6 +374,11 @@ export class AiWorkflowsService {
         where: { id: result.id },
         data: { questionId: question.id, reviewStatus: AiReviewStatus.SAVED },
       });
+      await this.storeQuestionEmbedding(
+        job.collegeId,
+        question.id,
+        question.questionText ?? "",
+      );
       await this.recordDuplicateCandidate(
         job.collegeId,
         question.id,
@@ -358,7 +425,17 @@ export class AiWorkflowsService {
         systemInstruction: this.safeExcerpt(dto.systemInstruction, 4000),
         userPromptTemplate: this.safeExcerpt(dto.userPromptTemplate, 4000),
         variables: dto.variables,
-        providerCompatibility: dto.providerCompatibility ?? ["mock"],
+        providerCompatibility: dto.providerCompatibility ?? [
+          "mock",
+          "openai",
+          "gemini",
+          "anthropic",
+          "azure-openai",
+          "ollama",
+        ],
+        temperature: dto.temperature ?? env().AI_TEMPERATURE,
+        maxTokens: dto.maxTokens ?? env().AI_MAX_OUTPUT_TOKENS,
+        model: this.optional(dto.model),
         active: dto.active ?? true,
         createdById: user.id,
         updatedById: user.id,
@@ -392,6 +469,9 @@ export class AiWorkflowsService {
           : undefined,
         variables: dto.variables,
         providerCompatibility: dto.providerCompatibility,
+        temperature: dto.temperature,
+        maxTokens: dto.maxTokens,
+        model: dto.model,
         active: dto.active,
         updatedById: user.id,
         versionHistory: [
@@ -437,7 +517,11 @@ export class AiWorkflowsService {
         maxQuestionsPerRequest: current.AI_MAX_QUESTIONS_PER_REQUEST,
         documentMaxBytes: current.AI_DOCUMENT_MAX_BYTES,
         documentRetentionDays: current.AI_DOCUMENT_RETENTION_DAYS,
-        ocrProviderConfigured: Boolean(current.OCR_PROVIDER),
+        temperature: current.AI_TEMPERATURE,
+        maxOutputTokens: current.AI_MAX_OUTPUT_TOKENS,
+        embeddingModel: current.AI_EMBEDDING_MODEL,
+        ocrProviderConfigured: current.OCR_PROVIDER !== "none",
+        ocrProvider: current.OCR_PROVIDER,
       },
     };
   }
@@ -456,7 +540,7 @@ export class AiWorkflowsService {
     const expiresAt = new Date(
       Date.now() + env().AI_DOCUMENT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
     );
-    const extraction = this.extractText(dto);
+    const extraction = await this.extractText(dto);
     const job = await this.prisma.documentImportJob.create({
       data: {
         collegeId,
@@ -470,6 +554,10 @@ export class AiWorkflowsService {
         sizeBytes: dto.sizeBytes,
         storageKey,
         sourceKind: extraction.sourceKind,
+        parserProvider: extraction.parserProvider,
+        ocrProvider: extraction.ocrProvider,
+        ocrAttempted: extraction.ocrAttempted,
+        ocrConfidence: extraction.ocrConfidence,
         extractedChars: extraction.text.length,
         candidateCount: extraction.candidates.length,
         errorSummary: extraction.warning,
@@ -484,6 +572,8 @@ export class AiWorkflowsService {
             metadata: {
               mimeType: dto.mimeType,
               sourceKind: extraction.sourceKind,
+              parserProvider: extraction.parserProvider,
+              ocrAttempted: extraction.ocrAttempted,
             },
             chunks: {
               create: extraction.chunks.map((chunk, index) => ({
@@ -508,7 +598,7 @@ export class AiWorkflowsService {
             validationIssues: candidate.validationIssues,
             warnings: candidate.warnings,
             confidence: candidate.confidence,
-            questionType: QuestionType.SHORT_ANSWER,
+            questionType: candidate.questionType,
             sourceReference: candidate.sourceReference,
           })),
         },
@@ -560,7 +650,7 @@ export class AiWorkflowsService {
       where: { id: jobId, ...this.documentWhere(user) },
     });
     if (!job) throw new NotFoundException("Document import job not found.");
-    if (job.status === DocumentImportStatus.OCR_REQUIRED && !env().OCR_PROVIDER) {
+    if (job.status === DocumentImportStatus.OCR_REQUIRED && env().OCR_PROVIDER === "none") {
       throw new BadRequestException("OCR provider is not configured.");
     }
     await this.prisma.documentImportJob.update({
@@ -614,6 +704,11 @@ export class AiWorkflowsService {
         where: { id: candidate.id },
         data: { questionId: question.id, reviewStatus: AiReviewStatus.SAVED },
       });
+      await this.storeQuestionEmbedding(
+        job.collegeId,
+        question.id,
+        question.questionText ?? "",
+      );
       saved.push(question);
     }
     await this.prisma.documentImportJob.update({
@@ -862,6 +957,10 @@ export class AiWorkflowsService {
           language: job.request?.language ?? "English",
           syllabusText: job.request?.syllabusText ?? undefined,
           sourceNotes: job.request?.sourceNotes ?? undefined,
+          userPrompt: job.request?.promptPreview ?? undefined,
+          temperature: job.request?.temperature ?? undefined,
+          maxTokens: job.request?.maxTokens ?? undefined,
+          model: job.request?.runtimeModel ?? undefined,
         }),
       );
       const response = aiProviderResponseSchema.parse(raw);
@@ -983,7 +1082,10 @@ export class AiWorkflowsService {
         subject: true,
         requestedBy: this.safeUserSelect(),
         request: true,
-        results: { orderBy: { createdAt: "asc" } },
+        results: {
+          orderBy: { createdAt: "asc" },
+          include: { versions: { orderBy: { versionNumber: "desc" } } },
+        },
         decisions: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -1026,37 +1128,27 @@ export class AiWorkflowsService {
       throw new BadRequestException("Unsupported document type.");
     }
     const extension = dto.fileName.split(".").pop()?.toLowerCase();
-    if (!extension || !["txt", "csv", "xlsx", "docx", "pdf", "png", "jpg", "jpeg"].includes(extension)) {
+    if (
+      !extension ||
+      !["txt", "md", "markdown", "csv", "xlsx", "docx", "pdf", "png", "jpg", "jpeg"].includes(
+        extension,
+      )
+    ) {
       throw new BadRequestException("Unsupported document extension.");
     }
   }
 
-  private extractText(dto: ImportDocumentDto) {
+  private async extractText(dto: ImportDocumentDto) {
+    const sourceKind = this.sourceKind(dto.fileName, dto.mimeType);
     if (dto.mimeType.startsWith("image/")) {
-      return {
-        text: "",
-        sourceKind: "IMAGE",
-        ocrRequired: true,
-        warning: "OCR_REQUIRED: configure an OCR provider before processing images.",
-        chunks: [],
-        candidates: [],
-        validationErrors: ["OCR provider is not configured."],
-      };
+      return this.extractWithOcr(dto, sourceKind);
     }
     const isPdf = dto.mimeType === "application/pdf";
-    const plain = this.decodeDocumentContent(dto.content);
+    const decoded = this.decodeDocumentContent(dto.content, dto.contentEncoding);
+    const plain = this.normalizeExtractedText(decoded, sourceKind);
     const looksScanned = isPdf && plain.trim().length < 30;
     if (looksScanned) {
-      return {
-        text: "",
-        sourceKind: "PDF",
-        ocrRequired: true,
-        warning:
-          "OCR_REQUIRED: scanned PDFs are not processed unless OCR is configured.",
-        chunks: [],
-        candidates: [],
-        validationErrors: ["Text-based PDF content was not detected."],
-      };
+      return this.extractWithOcr(dto, "PDF", "Text-based PDF content was not detected.");
     }
     const lines = plain
       .split(/\r?\n/)
@@ -1070,32 +1162,42 @@ export class AiWorkflowsService {
       textPreview: this.safeExcerpt(line, 500),
       metadata: { fileName: dto.fileName },
     }));
-    const candidates = lines
-      .filter((line) => line.includes("?") || /^q(?:uestion)?\s*\d+/i.test(line))
+    const questionBlocks = this.questionBlocks(lines);
+    const candidates = questionBlocks
       .slice(0, 20)
       .map((line, index) => ({
         questionText: this.sanitizeText(line.replace(/^q(?:uestion)?\s*\d+[:.)-]?\s*/i, "")),
-        options: [],
-        correctAnswer: null,
+        questionType: this.detectQuestionType(line),
+        options: this.detectOptions(line),
+        correctAnswer: this.detectCorrectAnswer(line),
         explanation: undefined,
-        suggestedTopic: "Imported document",
-        suggestedDifficulty: QuestionDifficulty.MEDIUM,
-        approvedDifficulty: QuestionDifficulty.MEDIUM,
-        suggestedBloomLevel: BloomLevel.UNDERSTAND,
-        approvedBloomLevel: BloomLevel.UNDERSTAND,
+        suggestedTopic: this.classifyTopic(line),
+        suggestedDifficulty: this.classifyDifficulty(line),
+        approvedDifficulty: this.classifyDifficulty(line),
+        suggestedBloomLevel: this.classifyBloom(line),
+        approvedBloomLevel: this.classifyBloom(line),
         validationIssues: [],
-        warnings: ["Imported content must be reviewed before use."],
-        confidence: 0.55,
+        warnings: [
+          "Imported content must be reviewed before use.",
+          "Automatic type, Bloom, difficulty, marks, topic, chapter, and subject mapping are advisory.",
+        ],
+        confidence: 0.68,
         sourceReference: {
           fileName: dto.fileName,
           rowNumber: dto.fileName.endsWith(".csv") ? index + 1 : undefined,
           pageNumber: isPdf ? 1 : undefined,
+          chapter: this.classifyChapter(line),
+          marks: this.classifyMarks(line),
         },
       }));
     return {
       text: plain,
-      sourceKind: dto.fileName.split(".").pop()?.toUpperCase() ?? "TEXT",
+      sourceKind,
+      parserProvider: "campustest-structured-parser",
       ocrRequired: false,
+      ocrAttempted: false,
+      ocrProvider: null,
+      ocrConfidence: null,
       warning: undefined,
       chunks,
       candidates:
@@ -1103,6 +1205,7 @@ export class AiWorkflowsService {
           ? candidates
           : [{
               questionText: `Review and create questions from ${dto.fileName}`,
+              questionType: QuestionType.SHORT_ANSWER,
               options: [],
               correctAnswer: null,
               explanation: "No explicit question was detected automatically.",
@@ -1120,8 +1223,10 @@ export class AiWorkflowsService {
     };
   }
 
-  private decodeDocumentContent(content: string): string {
-    const maybeBase64 = /^[A-Za-z0-9+/=\r\n]+$/.test(content) && content.length > 20;
+  private decodeDocumentContent(content: string, encoding?: string): string {
+    const maybeBase64 =
+      encoding === "base64" ||
+      (/^[A-Za-z0-9+/=\r\n]+$/.test(content) && content.length > 20);
     if (maybeBase64) {
       try {
         return Buffer.from(content, "base64").toString("utf8");
@@ -1130,6 +1235,214 @@ export class AiWorkflowsService {
       }
     }
     return content;
+  }
+
+  private async extractWithOcr(
+    dto: ImportDocumentDto,
+    sourceKind: string,
+    reason = "OCR is required for image-based content.",
+  ) {
+    if (env().OCR_PROVIDER !== "tesseract") {
+      return {
+        text: "",
+        sourceKind,
+        parserProvider: "campustest-structured-parser",
+        ocrRequired: true,
+        ocrAttempted: false,
+        ocrProvider: null,
+        ocrConfidence: null,
+        warning: `OCR_REQUIRED: ${reason}`,
+        chunks: [],
+        candidates: [],
+        validationErrors: ["OCR provider is not configured."],
+      };
+    }
+    try {
+      const extracted = await this.runTesseract(dto);
+      const text = this.normalizeExtractedText(extracted, sourceKind);
+      const lines = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      return {
+        text,
+        sourceKind,
+        parserProvider: "campustest-structured-parser",
+        ocrRequired: false,
+        ocrAttempted: true,
+        ocrProvider: "tesseract",
+        ocrConfidence: lines.length > 0 ? 0.72 : 0.2,
+        warning: lines.length > 0 ? undefined : "OCR completed but no text was detected.",
+        chunks: lines.slice(0, 50).map((line) => ({
+          pageNumber: sourceKind === "PDF" ? 1 : undefined,
+          textPreview: this.safeExcerpt(line, 500),
+          metadata: { fileName: dto.fileName, ocrProvider: "tesseract" },
+        })),
+        candidates: this.questionBlocks(lines)
+          .slice(0, 20)
+          .map((line) => ({
+            questionText: this.sanitizeText(line),
+            questionType: this.detectQuestionType(line),
+            options: this.detectOptions(line),
+            correctAnswer: this.detectCorrectAnswer(line),
+            explanation: undefined,
+            suggestedTopic: this.classifyTopic(line),
+            suggestedDifficulty: this.classifyDifficulty(line),
+            approvedDifficulty: this.classifyDifficulty(line),
+            suggestedBloomLevel: this.classifyBloom(line),
+            approvedBloomLevel: this.classifyBloom(line),
+            validationIssues: [],
+            warnings: ["OCR extraction must be manually reviewed before approval."],
+            confidence: 0.58,
+            sourceReference: { fileName: dto.fileName, ocrProvider: "tesseract" },
+          })),
+        validationErrors: [],
+      };
+    } catch {
+      return {
+        text: "",
+        sourceKind,
+        parserProvider: "campustest-structured-parser",
+        ocrRequired: true,
+        ocrAttempted: true,
+        ocrProvider: "tesseract",
+        ocrConfidence: null,
+        warning: "OCR_REQUIRED: Tesseract execution failed or is unavailable.",
+        chunks: [],
+        candidates: [],
+        validationErrors: ["Tesseract OCR failed or is unavailable."],
+      };
+    }
+  }
+
+  private async runTesseract(dto: ImportDocumentDto): Promise<string> {
+    const extension = dto.fileName.split(".").pop()?.toLowerCase() ?? "png";
+    const inputPath = join(
+      tmpdir(),
+      `campustest-ocr-${randomBytes(8).toString("hex")}.${extension}`,
+    );
+    const outputBase = join(tmpdir(), `campustest-ocr-${randomBytes(8).toString("hex")}`);
+    await fs.writeFile(inputPath, Buffer.from(dto.content, "base64"));
+    try {
+      await execFileAsync(env().TESSERACT_BINARY_PATH, [inputPath, outputBase, "-l", "eng"], {
+        timeout: env().AI_REQUEST_TIMEOUT_MS,
+      });
+      return await fs.readFile(`${outputBase}.txt`, "utf8");
+    } finally {
+      await fs.rm(inputPath, { force: true });
+      await fs.rm(`${outputBase}.txt`, { force: true });
+    }
+  }
+
+  private normalizeExtractedText(value: string, sourceKind: string) {
+    if (sourceKind === "DOCX" || sourceKind === "XLSX") {
+      return value
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    if (sourceKind === "MARKDOWN") {
+      return value
+        .replace(/```[\s\S]*?```/g, " ")
+        .replace(/[#*_>`~-]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    return value;
+  }
+
+  private questionBlocks(lines: string[]) {
+    return lines.filter(
+      (line) =>
+        line.includes("?") ||
+        /^q(?:uestion)?\s*\d+/i.test(line) ||
+        /\b(true|false)\b/i.test(line) ||
+        /_{3,}/.test(line) ||
+        /\b(write|code|implement|program)\b/i.test(line),
+    );
+  }
+
+  private detectQuestionType(line: string): QuestionType {
+    if (/\b(true|false)\b/i.test(line)) return QuestionType.TRUE_FALSE;
+    if (/_{3,}|\bfill in the blank\b/i.test(line)) {
+      return QuestionType.FILL_IN_THE_BLANK;
+    }
+    if (/\b(code|program|implement|function|algorithm)\b/i.test(line)) {
+      return QuestionType.CODING;
+    }
+    if (/\b(a[).]|option a)\b/i.test(line)) {
+      return QuestionType.SINGLE_CHOICE;
+    }
+    if (line.length > 180) return QuestionType.DESCRIPTIVE;
+    return QuestionType.SHORT_ANSWER;
+  }
+
+  private detectOptions(line: string) {
+    const matches = Array.from(
+      line.matchAll(/\b([A-D])[).]\s*([^A-D]+?)(?=\s+[A-D][).]|$)/gi),
+    );
+    return matches.map((match, index) => ({
+      optionKey: (match[1] ?? String.fromCharCode(65 + index)).toUpperCase(),
+      optionText: this.sanitizeText(match[2] ?? ""),
+      isCorrect: index === 0 && /\banswer\s*[:=-]\s*a\b/i.test(line),
+    }));
+  }
+
+  private detectCorrectAnswer(line: string): unknown {
+    const answer = line.match(/\banswer\s*[:=-]\s*([A-D]|true|false|[^.;]+)/i);
+    return answer?.[1]?.trim() ?? Prisma.JsonNull;
+  }
+
+  private classifyBloom(line: string): BloomLevel {
+    if (/\bdesign|create|compose|develop\b/i.test(line)) return BloomLevel.CREATE;
+    if (/\bevaluate|justify|critique\b/i.test(line)) return BloomLevel.EVALUATE;
+    if (/\banalyze|compare|differentiate\b/i.test(line)) return BloomLevel.ANALYZE;
+    if (/\bapply|solve|use|implement\b/i.test(line)) return BloomLevel.APPLY;
+    if (/\bexplain|summarize|classify\b/i.test(line)) return BloomLevel.UNDERSTAND;
+    return BloomLevel.REMEMBER;
+  }
+
+  private classifyDifficulty(line: string): QuestionDifficulty {
+    const words = line.split(/\s+/).length;
+    if (words > 32 || /\banalyze|evaluate|design|prove\b/i.test(line)) {
+      return QuestionDifficulty.HARD;
+    }
+    if (words > 18 || /\bexplain|apply|compare\b/i.test(line)) {
+      return QuestionDifficulty.MEDIUM;
+    }
+    return QuestionDifficulty.EASY;
+  }
+
+  private classifyTopic(line: string) {
+    const firstClause =
+      line.replace(/^q(?:uestion)?\s*\d+[:.)-]?\s*/i, "").split(/[?.:;-]/)[0] ??
+      "Imported document";
+    return this.safeExcerpt(
+      firstClause.trim() || "Imported document",
+      120,
+    );
+  }
+
+  private classifyChapter(line: string) {
+    return line.match(/\bchapter\s+([0-9A-Za-z -]+)/i)?.[0] ?? undefined;
+  }
+
+  private classifyMarks(line: string) {
+    return Number(line.match(/\b(\d+)\s*marks?\b/i)?.[1] ?? 1);
+  }
+
+  private sourceKind(fileName: string, mimeType: string) {
+    if (mimeType === "application/pdf") return "PDF";
+    if (mimeType.startsWith("image/")) return "IMAGE";
+    const extension = fileName.split(".").pop()?.toLowerCase();
+    if (extension === "docx") return "DOCX";
+    if (extension === "xlsx") return "XLSX";
+    if (extension === "md" || extension === "markdown") return "MARKDOWN";
+    if (extension === "csv") return "CSV";
+    return "TEXT";
   }
 
   private async enforceUsageLimits(user: AuthenticatedUser) {
@@ -1161,7 +1474,7 @@ export class AiWorkflowsService {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const collegeWhere =
       user.role === Role.SUPER_ADMIN ? {} : { collegeId: user.collegeId ?? "" };
-    const [dailyJobs, monthlyJobs, records] = await Promise.all([
+    const [dailyJobs, monthlyJobs, records, failedJobs, providerFailures] = await Promise.all([
       this.prisma.aiGenerationJob.count({
         where: { requestedById: user.id, createdAt: { gte: startOfDay } },
       }),
@@ -1170,6 +1483,18 @@ export class AiWorkflowsService {
       }),
       this.prisma.aiUsageRecord.findMany({
         where: { ...collegeWhere, createdAt: { gte: startOfMonth } },
+      }),
+      this.prisma.aiGenerationJob.count({
+        where: {
+          ...collegeWhere,
+          status: AiGenerationJobStatus.FAILED,
+          createdAt: { gte: startOfMonth },
+        },
+      }),
+      this.prisma.aiProviderFailure.findMany({
+        where: { ...collegeWhere, createdAt: { gte: startOfMonth } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
       }),
     ]);
     return {
@@ -1183,6 +1508,14 @@ export class AiWorkflowsService {
         (sum, row) => sum + (row.estimatedCost ?? 0),
         0,
       ),
+      actualCost: records.reduce((sum, row) => sum + (row.actualCost ?? 0), 0),
+      successfulRequests: records.filter((row) => row.success).length,
+      failedJobs,
+      providerFailures,
+      generationStatistics: {
+        byProvider: this.countBy(records.map((row) => row.provider)),
+        byModel: this.countBy(records.map((row) => row.model)),
+      },
     };
   }
 
@@ -1194,18 +1527,34 @@ export class AiWorkflowsService {
       take: 100,
       orderBy: { updatedAt: "desc" },
     });
+    const embeddings = await this.embedForDuplicate([
+      questionText,
+      ...questions.map((question) => question.questionText ?? ""),
+    ]);
+    const newEmbedding = embeddings[0] ?? [];
     return questions
-      .map((question) => {
+      .map((question, index) => {
         const existing = this.normalizeQuestion(question.questionText ?? "");
-        const score =
+        const fuzzyScore =
           existing === normalized
             ? 1
             : this.jaccard(tokens, new Set(existing.split(" ").filter(Boolean)));
+        const semanticScore = this.cosine(
+          newEmbedding,
+          embeddings[index + 1] ?? [],
+        );
+        const score = Math.max(fuzzyScore, semanticScore);
         return {
           existingQuestion: question,
           similarityScore: Number(score.toFixed(3)),
+          semanticScore: Number(semanticScore.toFixed(3)),
+          fuzzyScore: Number(fuzzyScore.toFixed(3)),
           duplicateReason:
-            existing === normalized ? "EXACT_NORMALIZED_MATCH" : "TOKEN_SIMILARITY",
+            existing === normalized
+              ? "EXACT_NORMALIZED_MATCH"
+              : semanticScore > fuzzyScore
+                ? "SEMANTIC_EMBEDDING_SIMILARITY"
+                : "FUZZY_TOKEN_SIMILARITY",
         };
       })
       .filter((item) => item.similarityScore >= 0.55)
@@ -1232,8 +1581,71 @@ export class AiWorkflowsService {
         normalizedQuestionHash: this.hash(this.normalizeQuestion(questionText)),
         similarityScore: best.similarityScore,
         duplicateReason: best.duplicateReason,
+        semanticScore: best.semanticScore,
+        fuzzyScore: best.fuzzyScore,
+        embeddingProvider: env().AI_PROVIDER,
+        embeddingModel: env().AI_EMBEDDING_MODEL,
       },
     });
+  }
+
+  private async embedForDuplicate(texts: string[]): Promise<number[][]> {
+    try {
+      const provider = this.providerFactory.getProvider();
+      if (provider.embedText) return await provider.embedText(texts);
+    } catch {
+      return localSemanticEmbedding(texts);
+    }
+    return localSemanticEmbedding(texts);
+  }
+
+  private async storeQuestionEmbedding(
+    collegeId: string,
+    questionId: string,
+    questionText: string,
+  ) {
+    const sourceTextHash = this.hash(this.normalizeQuestion(questionText));
+    const [vector] = await this.embedForDuplicate([questionText]);
+    await this.prisma.questionEmbedding.upsert({
+      where: {
+        sourceTextHash_provider_model: {
+          sourceTextHash,
+          provider: env().AI_PROVIDER,
+          model: env().AI_EMBEDDING_MODEL,
+        },
+      },
+      update: {
+        collegeId,
+        questionId,
+        vector: this.jsonValue(vector),
+      },
+      create: {
+        collegeId,
+        questionId,
+        sourceTextHash,
+        provider: env().AI_PROVIDER,
+        model: env().AI_EMBEDDING_MODEL,
+        vector: this.jsonValue(vector),
+        metadata: { generatedBy: "campustest-phase-12" },
+      },
+    });
+  }
+
+  private cosine(left: number[], right: number[]) {
+    if (left.length === 0 || right.length === 0) return 0;
+    const limit = Math.min(left.length, right.length);
+    let dot = 0;
+    let leftMagnitude = 0;
+    let rightMagnitude = 0;
+    for (let index = 0; index < limit; index += 1) {
+      const leftValue = left[index] ?? 0;
+      const rightValue = right[index] ?? 0;
+      dot += leftValue * rightValue;
+      leftMagnitude += leftValue * leftValue;
+      rightMagnitude += rightValue * rightValue;
+    }
+    if (leftMagnitude === 0 || rightMagnitude === 0) return 0;
+    return dot / Math.sqrt(leftMagnitude * rightMagnitude);
   }
 
   private optionCreates(value: unknown) {
@@ -1315,6 +1727,17 @@ export class AiWorkflowsService {
   private jsonValue(value: unknown) {
     if (value === null || value === undefined) return Prisma.JsonNull;
     return value as Prisma.InputJsonValue;
+  }
+
+  private toJsonObject(value: unknown): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+  }
+
+  private countBy(values: string[]) {
+    return values.reduce<Record<string, number>>((counts, value) => {
+      counts[value] = (counts[value] ?? 0) + 1;
+      return counts;
+    }, {});
   }
 
   private normalizeProviderError(error: unknown) {
