@@ -87,6 +87,7 @@ Student-facing attempt and result responses are deliberately safe: they use perm
 - `POST /system/queues/remove`
 - `POST /system/queues/:queueName/pause`
 - `POST /system/queues/:queueName/resume`
+
 # Phase 11 AI Question Workflows
 
 AI generation, document import, duplicate detection, prompt templates, usage, and syllabi are documented in Swagger at `/api/docs`.
@@ -104,6 +105,7 @@ Key routes:
 - `GET|POST|PATCH /api/v1/syllabi`
 
 AI and imported questions are review-first and save to the existing Question Bank as `DRAFT`.
+
 # Phase 14 Analytics And Reports
 
 Phase 14 adds protected endpoints for platform, college, faculty, student, assessment, question, subject, topic, comparison, leaderboard, report, and AI-insight analytics under `/api/v1/analytics`, `/api/v1/reports`, `/api/v1/report-jobs`, `/api/v1/report-files`, `/api/v1/assessments/:id/analytics`, and `/api/v1/questions/:id/analytics`.
@@ -185,6 +187,7 @@ Code-runner status routes:
 - `GET /api/v1/code-runner/images`
 
 Student-facing responses redact hidden test inputs and expected outputs. Swagger at `/api/docs` includes DTO validation and role guards.
+
 # Phase 18 SaaS APIs
 
 Commercial SaaS foundation endpoints include:
@@ -222,3 +225,15 @@ Commercial SaaS foundation endpoints include:
 - `POST /api/v1/platform/tenants/:id/credits`
 
 Swagger documents these routes at `/api/docs` when Swagger is enabled.
+
+# Phase 19 System Release APIs
+
+Protected Super Admin endpoints:
+
+- `GET /api/v1/system/release-readiness` returns release decision, provider/configuration checks, production blockers, version data, and unresolved blocker names.
+- `GET /api/v1/system/jobs` returns background job group counts, code-runner job group counts, stale worker heartbeats, and recovery policy metadata.
+
+Public/system endpoints retained:
+
+- `GET /api/v1/system/version`
+- `GET /api/v1/system/metrics`

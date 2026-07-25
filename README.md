@@ -18,6 +18,29 @@ CampusTest Pro is a monorepo for a college assessment platform with a Next.js fr
 4. Run `npm run db:generate`, `npm run db:migrate`, and `npm run db:seed`.
 5. Run `npm run dev`.
 
+## Release Readiness
+
+Phase 19 prepares CampusTest Pro for production configuration and staging validation. It does not claim a production launch.
+
+Current release decision: `READY_FOR_PRODUCTION_CONFIGURATION`.
+
+Key commands:
+
+- `npm run production:check`
+- `npm run production:check:example`
+- `npm run integrity:check`
+- `npm run verify:backup`
+- `npm run restore:database -- --dry-run`
+- `npm run route:crawl`
+- `npm run security:secret-scan`
+
+Protected Super Admin routes:
+
+- `/system/release-readiness`
+- `/system/jobs`
+
+Production must use real providers and secrets outside Git. Development-only providers such as mock billing, mock AI, console email, local storage, and mock code running are rejected by production validation. See `docs/RELEASE_READINESS.md` and `docs/PRODUCTION_BLOCKERS.md`.
+
 ## Authentication
 
 The API uses database-backed authentication with Argon2 password hashing, JWT access tokens, rotating refresh tokens, HTTP-only cookies, Redis-backed login rate limiting, backend role guards, disabled-account checks, and audit logging.

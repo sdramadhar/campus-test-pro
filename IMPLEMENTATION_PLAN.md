@@ -243,6 +243,14 @@
 - Seed four plans, features, limits, mock customer/invoice/payment data, active subscription, coupon, usage records, branding, pending domain, support ticket, announcement, and legal document versions.
 - Document that mock billing never charges money, custom domains require DNS/TLS, legal templates require professional review, PWA does not support offline high-stakes exams, mobile app is a foundation, and production launch still requires real deployment and load validation.
 
+## Phase 19 - Production Release Readiness
+
+- Add production environment validation for required URLs, JWT secrets, encryption key, trusted proxies, secure cookies, real email/storage/billing/AI/code-runner providers, backups, monitoring, and error tracking.
+- Add protected release-readiness and job recovery APIs under `/api/v1/system` plus Super Admin frontend pages at `/system/release-readiness` and `/system/jobs`.
+- Add integrity, backup verification, restore dry-run, route-crawl, and release workflow foundations.
+- Add v1.0 release notes, changelog, production blockers, credential inventory, role permission matrix, OWASP review, database review, backup drill, load-test, accessibility, support, and launch-gate documentation.
+- Keep the release decision honest: `READY_FOR_PRODUCTION_CONFIGURATION`, not production launched.
+
 ## Verification
 
 - Install dependencies.
@@ -257,6 +265,7 @@
 - For Phase 16, also verify `/student/coding-submissions`, `/coding/reviews`, `/coding/plagiarism`, `/system/code-runner`, `/admin/code-runner/languages`, `/analytics/coding`, API health/readiness/Swagger, and `http://localhost:4100/health` for the local mock gateway.
 - For Phase 17, also verify `/system/infrastructure`, `/api/v1/system/infrastructure`, `/api/v1/system/capacity`, `/api/v1/system/deployment-safety`, `/api/v1/system/backups`, `/api/v1/system/alerts`, `/api/v1/system/metrics-summary`, `/api/v1/system/metrics`, Kubernetes manifest validation, monitoring config, secret scan, and k6 smoke script syntax where tooling is available.
 - For Phase 18, also verify `/pricing`, `/signup/institution`, `/onboarding`, `/settings/subscription`, `/settings/branding`, `/settings/domains`, `/support`, `/super-admin/saas`, `/super-admin/tenants`, `/status`, billing/subscription APIs, webhook idempotency, entitlement blocks, support isolation, mobile device/push-token ownership, data export audit, legal documents, PWA manifest/service worker, and Swagger.
+- For Phase 19, also verify `/system/release-readiness`, `/system/jobs`, `/api/v1/system/release-readiness`, `/api/v1/system/jobs`, production environment example validation, integrity checks, backup verification dry run, route crawl, release workflow syntax, secret scan, and the documented launch blockers.
 - For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.
 - For Phase 13, also verify `/questions/ai-batch`, `/assessments/ai-paper`, `/assessments/random-sets`, batch progress/cancel/retry APIs, generated paper-set APIs, model-answer APIs, prompt rollback, validation reports, question analytics, notifications, Swagger, and worker/API readiness.
 - For Phase 14, also verify `/super-admin/analytics`, `/admin/analytics`, `/faculty/analytics`, `/student/analytics`, `/analytics/compare`, `/leaderboards`, `/reports/builder`, `/reports/jobs`, `/analytics/insights`, analytics/report APIs, report download audit, leaderboard policy, AI insight review, and the predictive analytics limitations notice.

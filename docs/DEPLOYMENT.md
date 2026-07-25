@@ -39,3 +39,15 @@ Provider option B: AWS ECS/Fargate or Kubernetes
 - ElastiCache Redis.
 - S3-compatible private bucket.
 - Autoscaling based on CPU, queue lag, and request latency.
+
+# Phase 19 Deployment Gate
+
+CampusTest Pro is ready for production configuration, not a production launch declaration.
+
+Before production:
+
+- Run `npm run production:check` in the target deployment environment.
+- Run Prisma migration status/deploy with the direct database URL.
+- Verify health, readiness, Swagger policy, workers, Redis, PostgreSQL, object storage, billing webhooks, email delivery, AI provider access, and code-runner isolation.
+- Complete backup restore and k6 staging load evidence.
+- Review `docs/PRODUCTION_BLOCKERS.md` before tagging or promoting a release.

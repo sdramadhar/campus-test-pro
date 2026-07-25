@@ -371,6 +371,18 @@ const navItems: Array<{
   },
   {
     roles: ["SUPER_ADMIN"],
+    href: "/system/release-readiness",
+    label: "Release Readiness",
+    icon: "shield",
+  },
+  {
+    roles: ["SUPER_ADMIN"],
+    href: "/system/jobs",
+    label: "Job Recovery",
+    icon: "queues",
+  },
+  {
+    roles: ["SUPER_ADMIN"],
     href: "/system/queues",
     label: "Queues",
     icon: "queues",

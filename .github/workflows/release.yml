@@ -1,0 +1,80 @@
+name: Release Readiness
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: campustest_pro
+          POSTGRES_USER: campustest
+          POSTGRES_PASSWORD: campustest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campustest -d campustest_pro"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      APP_ENV: test
+      DATABASE_URL: postgresql://campustest:campustest@localhost:5432/campustest_pro?schema=public
+      DIRECT_DATABASE_URL: postgresql://campustest:campustest@localhost:5432/campustest_pro?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-change-outside-prod
+      JWT_REFRESH_SECRET: ci-refresh-secret-change-outside-prod
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      WORKER_REQUIRED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:migrate:deploy
+      - run: npm run db:migrate:status
+      - run: npm run db:seed
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run route:crawl
+      - run: npm run integrity:check
+      - run: npm run production:check:example
+        continue-on-error: true
+      - run: npm run iac:validate
+      - run: npm run security:secret-scan
+      - run: npm run security:audit
+      - run: npm run build
+      - run: npm run docker:build
+      - name: Generate SBOM
+        run: npm sbom --json > sbom.npm.json
+      - name: Validate Kubernetes manifests
+        run: npm run iac:validate
+      - name: Staging deployment placeholder
+        run: echo "Staging deploy requires configured cloud credentials and manual environment approval."
+      - name: Production approval placeholder
+        run: echo "Production deploy is gated by manual approval, provider configuration, backup restore drill, and load validation."

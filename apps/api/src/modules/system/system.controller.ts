@@ -79,6 +79,22 @@ export class SystemController {
     return this.system.metricsText();
   }
 
+  @Get("release-readiness")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  releaseReadiness() {
+    return this.system.releaseReadiness();
+  }
+
+  @Get("jobs")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  jobs() {
+    return this.system.jobs();
+  }
+
   @Get("maintenance")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -105,7 +121,11 @@ export class SystemController {
   enableMaintenance(
     @CurrentUser() user: AuthenticatedUser,
     @Body()
-    body: { message?: string; allowAdmins?: boolean; blockNewExamStarts?: boolean },
+    body: {
+      message?: string;
+      allowAdmins?: boolean;
+      blockNewExamStarts?: boolean;
+    },
   ) {
     return this.system.updateMaintenance(user, { ...body, enabled: true });
   }

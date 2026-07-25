@@ -14,9 +14,11 @@
 - Result moderation requires a reason and stores moderation history; moderation holds prevent publication.
 - Security events remain review signals. Reviewers can mark attempts `NORMAL`, `FLAGGED`, `REVIEWED`, or `CLEARED`.
 - Redis is used for BullMQ and temporary operational state. Passwords, tokens, correct-answer keys, hidden test cases, and full student answers must not be stored in Redis job payloads.
+
 # Phase 11 AI Security Notes
 
 AI workflows keep provider secrets on the server, reject mock provider mode in production, sanitize provider errors, validate provider JSON, and treat imported document content as untrusted data. Duplicate detection is advisory only. See `docs/AI_SECURITY.md` and `docs/AI_PRIVACY.md`.
+
 # Phase 14 Analytics Security
 
 Analytics and reporting endpoints use JWT authentication, role guards, tenant scoping, faculty assignment checks, published-result restrictions for student views, expiring report files, and export audit logging. CSV output escapes formula-leading values. AI insights use aggregate payloads and are labelled as suggestions requiring human review.
@@ -36,6 +38,7 @@ Coding judge orchestration is protected by JWT guards, role guards, tenant isola
 Student responses redact hidden test input, expected output, evaluator metadata, runner tokens, internal runner URLs, and private source code belonging to other students. Plagiarism matches are advisory and require human review.
 
 See `docs/CODE_RUNNER_SECURITY.md`, `docs/CODE_RUNNER_THREAT_MODEL.md`, `docs/CODING_ASSESSMENTS.md`, and `docs/CODING_PLAGIARISM.md`.
+
 # Phase 18 Security Notes
 
 - Billing secrets stay server-side through environment variables.
@@ -46,3 +49,10 @@ See `docs/CODE_RUNNER_SECURITY.md`, `docs/CODE_RUNNER_THREAT_MODEL.md`, `docs/CO
 - Support attachments require tenant authorization.
 - PWA service worker excludes APIs, exam attempts, answers, reports, coding submissions, tokens, and proctoring evidence from cache.
 - Legal templates are placeholders and do not represent compliance certification.
+
+# Phase 19 Security Release Notes
+
+- Production validation rejects development-only mock billing, mock AI, console email, local object storage, mock code running, and default development JWT secrets.
+- Required production variables include `APP_ENCRYPTION_KEY`, `TRUSTED_PROXIES`, secure cookies, explicit CORS origins, backup provider settings, monitoring, and error tracking.
+- The release workflow includes dependency audit, secret scan, IaC validation, tests, builds, and Docker image build foundations.
+- A final production launch still requires staging DAST, penetration testing, WAF/rate-limit review, restore-drill evidence, and legal/privacy/security sign-off.

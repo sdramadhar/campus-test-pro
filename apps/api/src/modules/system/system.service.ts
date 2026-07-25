@@ -24,6 +24,8 @@ export class SystemService {
       buildTimestamp: current.BUILD_TIMESTAMP,
       environment: current.APP_ENV,
       nodeEnvironment: current.NODE_ENV,
+      apiVersion: current.RELEASE_API_VERSION,
+      databaseSchemaVersion: "20260725180000_phase_18_commercial_saas",
     };
   }
 
@@ -123,8 +125,12 @@ export class SystemService {
         version: this.version(),
         services: {
           web: { status: "external", replicas: "configured by deployment" },
-          api: { status: postgres === "ok" && redis === "ok" ? "ok" : "degraded" },
-          worker: workers.data.some((worker) => worker.healthy) ? "ok" : "degraded",
+          api: {
+            status: postgres === "ok" && redis === "ok" ? "ok" : "degraded",
+          },
+          worker: workers.data.some((worker) => worker.healthy)
+            ? "ok"
+            : "degraded",
           codeRunnerGateway: runnerJobs >= 0 ? "configured" : "unknown",
           postgres,
           redis,
@@ -148,7 +154,11 @@ export class SystemService {
           where: { status: TestAttemptStatus.IN_PROGRESS },
         }),
         this.prisma.backgroundJobRecord.count({
-          where: { status: { in: [BackgroundJobStatus.WAITING, BackgroundJobStatus.DELAYED] } },
+          where: {
+            status: {
+              in: [BackgroundJobStatus.WAITING, BackgroundJobStatus.DELAYED],
+            },
+          },
         }),
         this.prisma.runnerJob.count({ where: { status: "QUEUED" } }),
         this.prisma.backgroundJobRecord.count({
@@ -164,7 +174,8 @@ export class SystemService {
         codeRunnerQueued,
         validatedConcurrentUsers: null,
         targetProfile: "5,000-student staging validation pending",
-        claim: "No 5,000-concurrent support claim is made until staging k6 results pass.",
+        claim:
+          "No 5,000-concurrent support claim is made until staging k6 results pass.",
       },
     };
   }
@@ -197,9 +208,11 @@ export class SystemService {
       data: {
         status: recentBackupJob?.status ?? "NOT_RECORDED",
         lastBackupAt: recentBackupJob?.finishedAt ?? null,
-        postgres: "logical backup and managed snapshot configured by deployment",
+        postgres:
+          "logical backup and managed snapshot configured by deployment",
         redis: "persistence guidance only; PostgreSQL remains source of truth",
-        objectStorage: "versioning, lifecycle, and retention configured by provider",
+        objectStorage:
+          "versioning, lifecycle, and retention configured by provider",
       },
     };
   }
@@ -248,7 +261,11 @@ export class SystemService {
           },
         }),
         this.prisma.backgroundJobRecord.count({
-          where: { status: { in: [BackgroundJobStatus.WAITING, BackgroundJobStatus.DELAYED] } },
+          where: {
+            status: {
+              in: [BackgroundJobStatus.WAITING, BackgroundJobStatus.DELAYED],
+            },
+          },
         }),
         this.prisma.workerHeartbeat.count({
           where: { expiresAt: { gt: new Date() } },
@@ -261,7 +278,8 @@ export class SystemService {
         submissions,
         queueBacklog,
         healthyWorkers: workerCount,
-        labelsPolicy: "No answers, source code, tokens, hidden tests, or direct student identifiers are used as metric labels.",
+        labelsPolicy:
+          "No answers, source code, tokens, hidden tests, or direct student identifiers are used as metric labels.",
       },
     };
   }
@@ -282,6 +300,150 @@ export class SystemService {
     ].join("\n");
   }
 
+  async releaseReadiness() {
+    const current = env();
+    const [postgres, redis, migrations, failedJobs, staleWorkers] =
+      await Promise.all([
+        this.postgresStatus(),
+        this.redisStatus(),
+        this.prisma.$queryRaw<
+          Array<{ migration_name: string; finished_at: Date | null }>
+        >`
+          SELECT migration_name, finished_at
+          FROM "_prisma_migrations"
+          ORDER BY finished_at DESC
+          LIMIT 1
+        `.catch(() => []),
+        this.prisma.backgroundJobRecord.count({
+          where: { status: BackgroundJobStatus.FAILED },
+        }),
+        this.prisma.workerHeartbeat.count({
+          where: { expiresAt: { lt: new Date() } },
+        }),
+      ]);
+    const production = current.APP_ENV === "production";
+    const checks = [
+      this.readinessCheck(
+        "database",
+        postgres === "ok",
+        "PostgreSQL connectivity",
+      ),
+      this.readinessCheck("redis", redis === "ok", "Redis connectivity"),
+      this.readinessCheck(
+        "migrations",
+        migrations.length > 0,
+        "Prisma migration history",
+      ),
+      this.readinessCheck(
+        "billing",
+        current.BILLING_PROVIDER !== "MOCK",
+        "Production billing provider",
+        !production,
+      ),
+      this.readinessCheck(
+        "email",
+        current.EMAIL_PROVIDER !== "console",
+        "Production email provider",
+        !production,
+      ),
+      this.readinessCheck(
+        "storage",
+        current.STORAGE_PROVIDER !== "local",
+        "Production object storage",
+        !production,
+      ),
+      this.readinessCheck(
+        "ai",
+        current.AI_PROVIDER !== "mock",
+        "Production AI provider",
+        !production,
+      ),
+      this.readinessCheck(
+        "codeRunner",
+        current.CODE_RUNNER_MODE !== "MOCK",
+        "Production code runner",
+        !production,
+      ),
+      this.readinessCheck(
+        "monitoring",
+        Boolean(
+          current.OTEL_EXPORTER_ENDPOINT || current.OTEL_EXPORTER_OTLP_ENDPOINT,
+        ),
+        "Telemetry exporter",
+        !production,
+      ),
+      this.readinessCheck(
+        "backups",
+        current.BACKUP_PROVIDER !== "disabled",
+        "Backup provider",
+        !production,
+      ),
+      this.readinessCheck(
+        "failedJobs",
+        failedJobs === 0,
+        "No failed background jobs",
+        true,
+      ),
+      this.readinessCheck(
+        "workers",
+        staleWorkers === 0,
+        "No stale worker heartbeats",
+        true,
+      ),
+    ];
+    const failed = checks.filter((check) => check.status === "FAIL");
+    return {
+      success: true,
+      data: {
+        releaseDecision:
+          failed.length === 0
+            ? "READY_FOR_PRODUCTION_CONFIGURATION"
+            : "READY_FOR_STAGING",
+        productionReady: false,
+        productionClaim:
+          "Production launch is blocked until real providers, staging deployment, backup restore drill, monitoring, security review, and load validation pass.",
+        version: this.version(),
+        checks,
+        unresolvedBlockers: failed.map((check) => check.name),
+      },
+    };
+  }
+
+  async jobs() {
+    const [backgroundJobs, runnerJobs, staleWorkers] = await Promise.all([
+      this.prisma.backgroundJobRecord.groupBy({
+        by: ["queueName", "status"],
+        _count: { _all: true },
+        orderBy: [{ queueName: "asc" }, { status: "asc" }],
+      }),
+      this.prisma.runnerJob.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      this.prisma.workerHeartbeat.findMany({
+        where: { expiresAt: { lt: new Date() } },
+        orderBy: { lastSeenAt: "desc" },
+        take: 20,
+      }),
+    ]);
+    return {
+      success: true,
+      data: {
+        recovery: {
+          staleJobDetection: true,
+          retryPolicy: "Queue-specific retries with idempotent handlers.",
+          deadLetterVisibility: true,
+          adminRetryCancel:
+            "Foundation exposed for technical admins; destructive action requires reason.",
+          gracefulShutdown: true,
+        },
+        backgroundJobs,
+        runnerJobs,
+        staleWorkers,
+      },
+    };
+  }
+
   private async postgresStatus() {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
@@ -298,5 +460,18 @@ export class SystemService {
     } catch {
       return "error";
     }
+  }
+
+  private readinessCheck(
+    name: string,
+    passed: boolean,
+    description: string,
+    warningOnly = false,
+  ) {
+    return {
+      name,
+      status: passed ? "PASS" : warningOnly ? "WARNING" : "FAIL",
+      description,
+    };
   }
 }

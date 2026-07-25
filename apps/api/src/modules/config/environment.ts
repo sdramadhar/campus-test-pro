@@ -33,6 +33,8 @@ export const environmentSchema = z
       .transform((value) => value === "true"),
     COOKIE_DOMAIN: z.string().optional(),
     CORS_ORIGINS: z.string().optional(),
+    TRUSTED_PROXIES: z.string().optional(),
+    APP_ENCRYPTION_KEY: z.string().optional(),
     WEB_ORIGIN: z.string().optional(),
     FRONTEND_URL: optionalUrl,
     EMAIL_PROVIDER: z
@@ -49,7 +51,9 @@ export const environmentSchema = z
     OTEL_ENABLED: z.enum(["true", "false"]).default("false"),
     OTEL_EXPORTER_ENDPOINT: z.string().optional(),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
-    STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
+    STORAGE_PROVIDER: z
+      .enum(["local", "s3", "r2", "minio", "azure-blob"])
+      .default("local"),
     STORAGE_LOCAL_DIR: z.string().default("storage"),
     STORAGE_BUCKET: z.string().optional(),
     S3_ENDPOINT: z.string().optional(),
@@ -64,20 +68,44 @@ export const environmentSchema = z
     CODE_RUNNER_MODE: z
       .string()
       .default("DISABLED")
-      .transform((value) => value.toUpperCase().replace("EXTERNAL", "REMOTE_RUNNER"))
+      .transform((value) =>
+        value.toUpperCase().replace("EXTERNAL", "REMOTE_RUNNER"),
+      )
       .pipe(z.enum(["DISABLED", "MOCK", "DOCKER_ISOLATED", "REMOTE_RUNNER"])),
     CODE_RUNNER_URL: z.string().optional(),
     CODE_RUNNER_INTERNAL_TOKEN: z.string().optional(),
     CODE_RUNNER_QUEUE: z.string().default("code-execution"),
     CODE_RUNNER_INTERNAL_URL: z.string().optional(),
     CODE_RUNNER_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-    CODE_RUNNER_MAX_SOURCE_BYTES: z.coerce.number().int().positive().default(65536),
-    CODE_RUNNER_MAX_STDIN_BYTES: z.coerce.number().int().positive().default(8192),
-    CODE_RUNNER_MAX_OUTPUT_BYTES: z.coerce.number().int().positive().default(65536),
+    CODE_RUNNER_MAX_SOURCE_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(65536),
+    CODE_RUNNER_MAX_STDIN_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(8192),
+    CODE_RUNNER_MAX_OUTPUT_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(65536),
     CODE_RUNNER_DEFAULT_CPU_LIMIT: z.string().default("0.5"),
-    CODE_RUNNER_DEFAULT_MEMORY_MB: z.coerce.number().int().positive().default(256),
-    CODE_RUNNER_DEFAULT_PROCESS_LIMIT: z.coerce.number().int().positive().default(64),
-    CODE_RUNNER_ALLOWED_LANGUAGES: z.string().default("python,javascript,typescript,c,cpp,java,go,csharp,kotlin,rust"),
+    CODE_RUNNER_DEFAULT_MEMORY_MB: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(256),
+    CODE_RUNNER_DEFAULT_PROCESS_LIMIT: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(64),
+    CODE_RUNNER_ALLOWED_LANGUAGES: z
+      .string()
+      .default("python,javascript,typescript,c,cpp,java,go,csharp,kotlin,rust"),
     AI_FEATURE_ENABLED: z.enum(["true", "false"]).default("true"),
     AI_PROVIDER: z
       .enum(["mock", "openai", "gemini", "anthropic", "azure-openai", "ollama"])
@@ -92,7 +120,11 @@ export const environmentSchema = z
     AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
     AI_DAILY_LIMIT: z.coerce.number().int().positive().default(100),
     AI_MONTHLY_LIMIT: z.coerce.number().int().positive().default(2000),
-    AI_MAX_QUESTIONS_PER_REQUEST: z.coerce.number().int().positive().default(10),
+    AI_MAX_QUESTIONS_PER_REQUEST: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10),
     AI_DOCUMENT_MAX_BYTES: z.coerce.number().int().positive().default(5242880),
     AI_DOCUMENT_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
     OPENAI_API_KEY: z.string().optional(),
@@ -122,6 +154,12 @@ export const environmentSchema = z
     PUSH_PROVIDER: z.enum(["disabled", "web-push", "fcm"]).default("disabled"),
     PUSH_PUBLIC_KEY: z.string().optional(),
     PUSH_PRIVATE_KEY: z.string().optional(),
+    BACKUP_PROVIDER: z
+      .enum(["disabled", "local", "s3", "r2", "azure-blob"])
+      .default("disabled"),
+    BACKUP_BUCKET: z.string().optional(),
+    BACKUP_ENCRYPTION_KEY_ID: z.string().optional(),
+    RELEASE_API_VERSION: z.string().default("v1"),
     SWAGGER_ENABLED: z.enum(["true", "false"]).default("true"),
     MAINTENANCE_MODE: z.enum(["true", "false"]).default("false"),
     ALLOW_ADMIN_DURING_MAINTENANCE: z.enum(["true", "false"]).default("true"),
@@ -156,7 +194,8 @@ export const environmentSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["DIRECT_DATABASE_URL"],
-        message: "Staging and production require a direct migration database URL.",
+        message:
+          "Staging and production require a direct migration database URL.",
       });
     }
     if (strictEnvironment && !env.INTERNAL_SERVICE_TOKEN) {
@@ -166,9 +205,25 @@ export const environmentSchema = z
         message: "Staging and production require an internal service token.",
       });
     }
+    if (strictEnvironment && !env.TRUSTED_PROXIES) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["TRUSTED_PROXIES"],
+        message:
+          "Staging and production require explicit trusted proxy configuration.",
+      });
+    }
+    if (strictEnvironment && !env.APP_ENCRYPTION_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["APP_ENCRYPTION_KEY"],
+        message:
+          "Staging and production require an application encryption key.",
+      });
+    }
     if (
       strictEnvironment &&
-      env.STORAGE_PROVIDER === "s3" &&
+      env.STORAGE_PROVIDER !== "local" &&
       !(
         (env.STORAGE_BUCKET || env.OBJECT_STORAGE_BUCKET) &&
         (env.S3_REGION || env.OBJECT_STORAGE_REGION)
@@ -218,6 +273,20 @@ export const environmentSchema = z
           code: "custom",
           path: ["SWAGGER_ENABLED"],
           message: "Disable or protect Swagger in production.",
+        });
+      }
+      if (env.EMAIL_PROVIDER === "console") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["EMAIL_PROVIDER"],
+          message: "Console email provider is not allowed in production.",
+        });
+      }
+      if (env.STORAGE_PROVIDER === "local") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["STORAGE_PROVIDER"],
+          message: "Local object storage is not allowed in production.",
         });
       }
       if (env.CODE_RUNNER_MODE === "MOCK") {
@@ -287,13 +356,15 @@ export const environmentSchema = z
       }
       if (
         env.BILLING_ENABLED === "true" &&
-        (env.BILLING_PROVIDER === "STRIPE" || env.BILLING_PROVIDER === "RAZORPAY") &&
+        (env.BILLING_PROVIDER === "STRIPE" ||
+          env.BILLING_PROVIDER === "RAZORPAY") &&
         (!env.BILLING_SECRET_KEY || !env.BILLING_WEBHOOK_SECRET)
       ) {
         ctx.addIssue({
           code: "custom",
           path: ["BILLING_SECRET_KEY"],
-          message: "Paid billing providers require server-side secret and webhook secrets.",
+          message:
+            "Paid billing providers require server-side secret and webhook secrets.",
         });
       }
       if (
@@ -307,7 +378,7 @@ export const environmentSchema = z
         });
       }
       if (
-        env.STORAGE_PROVIDER === "s3" &&
+        env.STORAGE_PROVIDER !== "local" &&
         !(
           (env.STORAGE_BUCKET || env.OBJECT_STORAGE_BUCKET) &&
           (env.S3_REGION || env.OBJECT_STORAGE_REGION)
@@ -317,6 +388,13 @@ export const environmentSchema = z
           code: "custom",
           path: ["OBJECT_STORAGE_BUCKET"],
           message: "S3 storage requires bucket and region.",
+        });
+      }
+      if (env.BACKUP_PROVIDER === "disabled" || !env.BACKUP_BUCKET) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["BACKUP_PROVIDER"],
+          message: "Production requires configured encrypted backup storage.",
         });
       }
     }

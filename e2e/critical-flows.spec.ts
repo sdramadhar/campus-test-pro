@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { skipWhenWebUnavailable } from "./helpers";
+
+skipWhenWebUnavailable();
 
 const accounts = [
   {
