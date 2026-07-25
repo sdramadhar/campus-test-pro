@@ -20,12 +20,15 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run iac:validate
+      - run: npm run security:secret-scan
       - run: npm run build
       - name: Build immutable images
         run: |
           docker build -f Dockerfile.api -t "$REGISTRY/campustest-api:${GITHUB_SHA}" .
           docker build -f Dockerfile.worker -t "$REGISTRY/campustest-worker:${GITHUB_SHA}" .
           docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_API_URL="$PRODUCTION_API_URL" -t "$REGISTRY/campustest-web:${GITHUB_SHA}" .
+          docker build -f apps/code-runner-gateway/Dockerfile -t "$REGISTRY/campustest-code-runner-gateway:${GITHUB_SHA}" .
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
           PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}

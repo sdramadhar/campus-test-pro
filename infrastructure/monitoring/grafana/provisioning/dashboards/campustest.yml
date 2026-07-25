@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: CampusTest Pro
+    folder: CampusTest Pro
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

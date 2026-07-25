@@ -23,13 +23,32 @@
     "db:seed:dev": "npm run prisma:seed --workspace apps/api",
     "db:backup": "powershell -ExecutionPolicy Bypass -File scripts/backup-postgres.ps1",
     "db:restore:docs": "powershell -ExecutionPolicy Bypass -File scripts/restore-postgres.ps1 -Help",
-    "docker:build": "docker build -f Dockerfile.api -t campustest-api:local . && docker build -f Dockerfile.web -t campustest-web:local . && docker build -f Dockerfile.worker -t campustest-worker:local .",
+    "docker:build": "docker build -f Dockerfile.api -t campustest-api:local . && docker build -f Dockerfile.web -t campustest-web:local . && docker build -f Dockerfile.worker -t campustest-worker:local . && docker build -f apps/code-runner-gateway/Dockerfile -t campustest-code-runner-gateway:local .",
+    "iac:validate": "node scripts/validate-phase17.js",
+    "security:audit": "node scripts/audit-policy.js",
+    "security:secret-scan": "node scripts/secret-scan.js",
+    "k6:smoke": "k6 run -e PROFILE=smoke load-tests/student-exam-flow.js",
     "e2e": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "concurrently": "^9.2.1",
+    "js-yaml": "5.2.2",
+    "minimatch": "10.2.5",
+    "postcss": "8.5.18",
     "prettier": "^3.6.2"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8",
+    "minimatch": "10.2.5",
+    "@nestjs/swagger": {
+      ".": "^11.4.6",
+      "js-yaml": "5.2.2"
+    },
+    "next": {
+      ".": "16.3.0-canary.89",
+      "postcss": "8.5.18"
+    }
   },
   "engines": {
     "node": ">=20.11.0",

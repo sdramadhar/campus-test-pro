@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campustest-api
+  namespace: campustest
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: campustest-api }
+  template:
+    metadata:
+      labels: { app: campustest-api }
+    spec:
+      serviceAccountName: campustest-runtime
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: api
+          image: registry.example.invalid/campustest-api:COMMIT_SHA
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 4000 }]
+          envFrom:
+            - configMapRef: { name: campustest-config }
+            - secretRef: { name: campustest-secrets }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet: { path: /health, port: 4000 }
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: { path: /ready, port: 4000 }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /health, port: 4000 }
+            periodSeconds: 30
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campustest-web
+  namespace: campustest
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: campustest-web }
+  template:
+    metadata:
+      labels: { app: campustest-web }
+    spec:
+      serviceAccountName: campustest-runtime
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: web
+          image: registry.example.invalid/campustest-web:COMMIT_SHA
+          ports: [{ containerPort: 3000 }]
+          envFrom:
+            - configMapRef: { name: campustest-config }
+          resources:
+            requests: { cpu: 150m, memory: 256Mi }
+            limits: { cpu: 750m, memory: 768Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet: { path: /, port: 3000 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: 3000 }
+            periodSeconds: 30
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campustest-worker
+  namespace: campustest
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: campustest-worker }
+  template:
+    metadata:
+      labels: { app: campustest-worker }
+    spec:
+      serviceAccountName: campustest-runtime
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: registry.example.invalid/campustest-worker:COMMIT_SHA
+          envFrom:
+            - configMapRef: { name: campustest-config }
+            - secretRef: { name: campustest-secrets }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campustest-code-runner-gateway
+  namespace: campustest
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: campustest-code-runner-gateway }
+  template:
+    metadata:
+      labels: { app: campustest-code-runner-gateway }
+    spec:
+      serviceAccountName: campustest-runtime
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: gateway
+          image: registry.example.invalid/campustest-code-runner-gateway:COMMIT_SHA
+          ports: [{ containerPort: 4100 }]
+          envFrom:
+            - configMapRef: { name: campustest-config }
+            - secretRef: { name: campustest-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            httpGet: { path: /health, port: 4100 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 4100 }
+            periodSeconds: 30

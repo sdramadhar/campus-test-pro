@@ -26,6 +26,59 @@ export class SystemController {
     return this.system.workerStatus();
   }
 
+  @Get("infrastructure")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  infrastructure() {
+    return this.system.infrastructure();
+  }
+
+  @Get("capacity")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  capacity() {
+    return this.system.capacity();
+  }
+
+  @Get("deployment-safety")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  deploymentSafety() {
+    return this.system.deploymentSafety();
+  }
+
+  @Get("backups")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  backups() {
+    return this.system.backups();
+  }
+
+  @Get("alerts")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  alerts() {
+    return this.system.alerts();
+  }
+
+  @Get("metrics-summary")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  metricsSummary() {
+    return this.system.metricsSummary();
+  }
+
+  @Get("metrics")
+  metricsText() {
+    return this.system.metricsText();
+  }
+
   @Get("maintenance")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -43,5 +96,25 @@ export class SystemController {
     @Body() body: { enabled: boolean; message?: string; allowAdmins?: boolean },
   ) {
     return this.system.updateMaintenance(user, body);
+  }
+
+  @Post("maintenance/enable")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  enableMaintenance(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body()
+    body: { message?: string; allowAdmins?: boolean; blockNewExamStarts?: boolean },
+  ) {
+    return this.system.updateMaintenance(user, { ...body, enabled: true });
+  }
+
+  @Post("maintenance/disable")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  disableMaintenance(@CurrentUser() user: AuthenticatedUser) {
+    return this.system.updateMaintenance(user, { enabled: false });
   }
 }

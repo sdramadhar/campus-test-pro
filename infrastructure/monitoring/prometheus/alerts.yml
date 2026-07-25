@@ -1,0 +1,21 @@
+groups:
+  - name: campustest
+    rules:
+      - alert: CampustestApiReadinessFailure
+        expr: up{job="campustest-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "CampusTest API readiness failed"
+      - alert: CampustestQueueBacklogHigh
+        expr: campustest_queue_backlog > 500
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "CampusTest queue backlog is high"
+      - alert: CampustestWorkerHeartbeatMissing
+        expr: campustest_healthy_workers < 1
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "No fresh CampusTest worker heartbeat"

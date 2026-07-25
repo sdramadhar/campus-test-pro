@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: campustest-api
+  namespace: campustest
+spec:
+  type: ClusterIP
+  selector: { app: campustest-api }
+  ports: [{ name: http, port: 4000, targetPort: 4000 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: campustest-web
+  namespace: campustest
+spec:
+  type: ClusterIP
+  selector: { app: campustest-web }
+  ports: [{ name: http, port: 3000, targetPort: 3000 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: campustest-code-runner-gateway
+  namespace: campustest
+spec:
+  type: ClusterIP
+  selector: { app: campustest-code-runner-gateway }
+  ports: [{ name: http, port: 4100, targetPort: 4100 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: campustest
+  namespace: campustest
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  tls:
+    - hosts: ["app.example.invalid", "api.example.invalid"]
+      secretName: campustest-managed-tls
+  rules:
+    - host: app.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: campustest-web
+                port: { number: 3000 }
+    - host: api.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: campustest-api
+                port: { number: 4000 }

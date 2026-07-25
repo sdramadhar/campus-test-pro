@@ -57,8 +57,11 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run iac:validate
+      - run: npm run security:secret-scan
       - run: npm run build
-      - run: npm audit --audit-level=moderate
+      - run: npm run security:audit
       - run: docker build -f Dockerfile.api -t campustest-api:${{ github.sha }} .
       - run: docker build -f Dockerfile.worker -t campustest-worker:${{ github.sha }} .
       - run: docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_API_URL=http://localhost:4000 -t campustest-web:${{ github.sha }} .
+      - run: docker build -f apps/code-runner-gateway/Dockerfile -t campustest-code-runner-gateway:${{ github.sha }} .

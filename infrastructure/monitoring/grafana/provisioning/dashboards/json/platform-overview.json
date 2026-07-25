@@ -1,0 +1,9 @@
+{
+  "title": "CampusTest Pro Platform Overview",
+  "schemaVersion": 39,
+  "panels": [
+    { "type": "stat", "title": "Active Attempts", "targets": [{ "expr": "campustest_active_attempts" }] },
+    { "type": "stat", "title": "Queue Backlog", "targets": [{ "expr": "campustest_queue_backlog" }] },
+    { "type": "stat", "title": "Healthy Workers", "targets": [{ "expr": "campustest_healthy_workers" }] }
+  ]
+}

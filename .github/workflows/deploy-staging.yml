@@ -22,12 +22,15 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run iac:validate
+      - run: npm run security:secret-scan
       - run: npm run build
       - name: Build immutable images
         run: |
           docker build -f Dockerfile.api -t "$REGISTRY/campustest-api:${GITHUB_SHA}" .
           docker build -f Dockerfile.worker -t "$REGISTRY/campustest-worker:${GITHUB_SHA}" .
           docker build -f Dockerfile.web --build-arg NEXT_PUBLIC_API_URL="$STAGING_API_URL" -t "$REGISTRY/campustest-web:${GITHUB_SHA}" .
+          docker build -f apps/code-runner-gateway/Dockerfile -t "$REGISTRY/campustest-code-runner-gateway:${GITHUB_SHA}" .
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
           STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
@@ -39,3 +42,5 @@ jobs:
         run: echo "Deploy web, api, and worker with image tag ${GITHUB_SHA}."
       - name: Health check
         run: echo "Verify /health and /ready, then record deployment metadata."
+      - name: k6 smoke
+        run: echo "Run k6 smoke against staging after health checks pass."

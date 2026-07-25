@@ -1,0 +1,49 @@
+services:
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: campustest
+      DB_PASSWORD: campustest
+      DB_NAME: campustest_pro
+      POOL_MODE: transaction
+    ports:
+      - "6432:5432"
+    depends_on:
+      - postgres
+    networks:
+      - campustest
+
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infrastructure/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - campustest
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./infrastructure/monitoring/prometheus:/etc/prometheus:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - campustest
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: campustest-local-only
+    volumes:
+      - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - campustest
+
+networks:
+  campustest:
+    external: false

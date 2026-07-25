@@ -7,8 +7,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ($env:NODE_ENV -eq "production") {
+if ($env:NODE_ENV -eq "production" -or $env:APP_ENV -eq "production") {
   throw "Staging data generation is blocked in production."
+}
+
+if ($env:NODE_ENV -ne "staging" -and $env:APP_ENV -ne "staging" -and $env:NODE_ENV -ne "development") {
+  throw "Set NODE_ENV or APP_ENV to staging/development before generating synthetic data."
 }
 
 Write-Host "Staging data generation placeholder."

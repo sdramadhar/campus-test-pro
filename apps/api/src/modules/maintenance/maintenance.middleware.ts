@@ -19,7 +19,12 @@ export class MaintenanceMiddleware implements NestMiddleware {
     _response: Response,
     next: NextFunction,
   ): Promise<void> {
-    if (request.path === "/health" || request.path === "/ready") {
+    const route = request.originalUrl || request.path;
+    if (
+      request.path === "/health" ||
+      request.path === "/ready" ||
+      route.includes("/system/maintenance")
+    ) {
       next();
       return;
     }

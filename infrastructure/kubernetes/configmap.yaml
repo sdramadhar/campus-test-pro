@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: campustest-config
+  namespace: campustest
+data:
+  APP_ENV: production
+  NODE_ENV: production
+  API_PORT: "4000"
+  PORT: "4000"
+  COOKIE_SECURE: "true"
+  SWAGGER_ENABLED: "false"
+  OTEL_ENABLED: "true"
+  CODE_RUNNER_MODE: REMOTE_RUNNER
+  WORKER_REQUIRED: "true"
+  MAINTENANCE_MODE: "false"
+  FEATURE_FLAGS: '{"readReplica":true,"examSafeDeployments":true}'

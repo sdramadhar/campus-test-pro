@@ -16,6 +16,9 @@ $env:DIRECT_DATABASE_URL="postgresql://..."
 Requirements:
 
 - Verify backups by restoring into a non-production database.
+- Encrypt backups and store them outside the primary database region where policy requires it.
+- Use managed snapshots in addition to logical backups.
+- Verify object-storage versioning and retention for reports and proctoring evidence.
 - Define RPO/RTO per deployment; this repo does not guarantee them.
 - Redis data is not the permanent source of truth. BullMQ and rate-limit Redis should use persistence where operationally useful.
 
@@ -23,6 +26,7 @@ Disaster checklist:
 
 1. Freeze writes if needed.
 2. Identify last known good backup.
+3. Restore into an isolated environment before production promotion.
 3. Restore PostgreSQL.
 4. Start Redis.
 5. Run readiness checks.

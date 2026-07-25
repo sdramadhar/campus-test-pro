@@ -70,6 +70,11 @@ async function main(): Promise<void> {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen(0);
   await clearLoginRateKeys(app.get(RedisService));
+  await app.get(PrismaService).maintenanceState.upsert({
+    where: { id: "global" },
+    update: { enabled: false, message: null, allowAdmins: true },
+    create: { id: "global", enabled: false, allowAdmins: true },
+  });
 
   const server = app.getHttpServer() as Server;
   const address = server.address() as AddressInfo;
@@ -1693,6 +1698,54 @@ async function runProductionHardeningTests(
     }),
     200,
     "maintenance status visible to admins",
+  );
+  for (const endpoint of [
+    "infrastructure",
+    "capacity",
+    "deployment-safety",
+    "backups",
+    "alerts",
+    "metrics-summary",
+  ]) {
+    await expectStatus(
+      fetch(`${baseUrl}/api/v1/system/${endpoint}`, {
+        headers: { Cookie: superAdminSession.cookie },
+      }),
+      200,
+      `system ${endpoint} allows super admin`,
+    );
+    await expectStatus(
+      fetch(`${baseUrl}/api/v1/system/${endpoint}`, {
+        headers: { Cookie: studentSession.cookie },
+      }),
+      403,
+      `system ${endpoint} rejects student`,
+    );
+  }
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/system/metrics`),
+    200,
+    "sanitized metrics endpoint",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/system/maintenance/enable",
+      superAdminSession.cookie,
+      { message: "Integration test maintenance", blockNewExamStarts: true },
+    ),
+    201,
+    "maintenance enable endpoint",
+  );
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/system/maintenance/disable",
+      superAdminSession.cookie,
+      {},
+    ),
+    201,
+    "maintenance disable endpoint",
   );
 
   await expectStatus(

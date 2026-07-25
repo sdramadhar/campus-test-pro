@@ -388,6 +388,20 @@ Frontend routes include:
 
 Local development uses `CODE_RUNNER_MODE=MOCK`; the mock gateway never compiles or executes untrusted code. Production must use a separately hardened isolated runner service. See `docs/CODE_RUNNER_SECURITY.md`, `docs/CODE_RUNNER_OPERATIONS.md`, `docs/CODE_RUNNER_THREAT_MODEL.md`, `docs/CODE_RUNNER_LOCAL_SETUP.md`, `docs/CODING_ASSESSMENTS.md`, and `docs/CODING_PLAGIARISM.md`.
 
+## Phase 17 Enterprise Infrastructure
+
+Phase 17 adds provider-neutral production infrastructure foundations: Kubernetes manifests, PgBouncer config, reverse proxy config, Prometheus/Grafana provisioning, CI/security workflows, staging/production env examples, capacity testing docs, and a protected `/system/infrastructure` dashboard.
+
+Key local validation commands:
+
+- `npm run iac:validate`
+- `npm run security:secret-scan`
+- `npm run k6:smoke` when k6 is installed and the local API is running
+
+No 5,000-concurrent-user support is claimed until a real staging load test passes and results are recorded in `docs/SCALING_RESULTS_TEMPLATE.md`.
+
+Enterprise docs start with `docs/ENTERPRISE_ARCHITECTURE.md`, `docs/PRODUCTION_TOPOLOGY.md`, `docs/STAGING_TOPOLOGY.md`, `docs/ENVIRONMENT_CONFIGURATION.md`, `docs/DATABASE_PRODUCTION.md`, `docs/REDIS_PRODUCTION.md`, `docs/OBJECT_STORAGE.md`, `docs/MONITORING.md`, `docs/ALERTING_RUNBOOK.md`, `docs/DISASTER_RECOVERY.md`, `docs/RESTORE_RUNBOOK.md`, `docs/CAPACITY_TESTING.md`, `docs/ENTERPRISE_SECURITY_AUDIT.md`, `docs/INCIDENT_RESPONSE_RUNBOOK.md`, and `docs/SECRETS_MANAGEMENT.md`.
+
 ## Verification Commands
 
 - `npm run db:generate`
@@ -410,6 +424,7 @@ Worker:
 - API readiness: http://localhost:4000/ready
 - Swagger: http://localhost:4000/api/docs
 - Local mock code-runner gateway: http://localhost:4100/health
+- Infrastructure dashboard: http://localhost:3000/system/infrastructure
 
 ## Phase 15 Secure Exam Monitoring
 

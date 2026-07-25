@@ -7,11 +7,18 @@ export const environmentSchema = z
     NODE_ENV: z
       .enum(["development", "test", "staging", "production"])
       .default("development"),
+    APP_ENV: z
+      .enum(["local", "test", "staging", "production"])
+      .default("local"),
+    APP_VERSION: z.string().optional(),
+    GIT_COMMIT_SHA: z.string().optional(),
     API_PORT: z.coerce.number().int().positive().default(4000),
     PORT: z.coerce.number().int().positive().optional(),
+    API_URL: optionalUrl,
     DATABASE_URL: z.string().min(1),
     DIRECT_DATABASE_URL: z.string().optional(),
     REDIS_URL: z.string().min(1),
+    INTERNAL_SERVICE_TOKEN: z.string().optional(),
     JWT_ACCESS_SECRET: z.string().min(16),
     JWT_REFRESH_SECRET: z.string().min(16),
     ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
@@ -40,6 +47,7 @@ export const environmentSchema = z
     AWS_REGION: z.string().optional(),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     OTEL_ENABLED: z.enum(["true", "false"]).default("false"),
+    OTEL_EXPORTER_ENDPOINT: z.string().optional(),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
     STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
     STORAGE_LOCAL_DIR: z.string().default("storage"),
@@ -48,6 +56,11 @@ export const environmentSchema = z
     S3_REGION: z.string().optional(),
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),
+    OBJECT_STORAGE_ENDPOINT: z.string().optional(),
+    OBJECT_STORAGE_BUCKET: z.string().optional(),
+    OBJECT_STORAGE_REGION: z.string().optional(),
+    OBJECT_STORAGE_ACCESS_KEY: z.string().optional(),
+    OBJECT_STORAGE_SECRET_KEY: z.string().optional(),
     CODE_RUNNER_MODE: z
       .string()
       .default("DISABLED")
@@ -95,13 +108,62 @@ export const environmentSchema = z
     SWAGGER_ENABLED: z.enum(["true", "false"]).default("true"),
     MAINTENANCE_MODE: z.enum(["true", "false"]).default("false"),
     ALLOW_ADMIN_DURING_MAINTENANCE: z.enum(["true", "false"]).default("true"),
+    FEATURE_FLAGS: z.string().default("{}"),
     RELEASE_VERSION: z.string().default("0.1.0"),
     COMMIT_SHA: z.string().default("local"),
     BUILD_TIMESTAMP: z.string().default(new Date(0).toISOString()),
+    ERROR_TRACKING_DSN: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
   })
   .superRefine((env, ctx) => {
-    if (env.NODE_ENV === "production") {
+    const strictEnvironment =
+      env.NODE_ENV === "staging" ||
+      env.NODE_ENV === "production" ||
+      env.APP_ENV === "staging" ||
+      env.APP_ENV === "production";
+    if (strictEnvironment && !env.FRONTEND_URL && !env.WEB_ORIGIN) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["FRONTEND_URL"],
+        message: "Staging and production require an explicit frontend URL.",
+      });
+    }
+    if (strictEnvironment && !env.API_URL) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["API_URL"],
+        message: "Staging and production require an explicit API URL.",
+      });
+    }
+    if (strictEnvironment && !env.DIRECT_DATABASE_URL) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["DIRECT_DATABASE_URL"],
+        message: "Staging and production require a direct migration database URL.",
+      });
+    }
+    if (strictEnvironment && !env.INTERNAL_SERVICE_TOKEN) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["INTERNAL_SERVICE_TOKEN"],
+        message: "Staging and production require an internal service token.",
+      });
+    }
+    if (
+      strictEnvironment &&
+      env.STORAGE_PROVIDER === "s3" &&
+      !(
+        (env.STORAGE_BUCKET || env.OBJECT_STORAGE_BUCKET) &&
+        (env.S3_REGION || env.OBJECT_STORAGE_REGION)
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["OBJECT_STORAGE_BUCKET"],
+        message: "S3-compatible object storage requires bucket and region.",
+      });
+    }
+    if (env.NODE_ENV === "production" || env.APP_ENV === "production") {
       const forbiddenSecrets = new Set([
         "dev-access-secret-change-me",
         "dev-refresh-secret-change-me",
@@ -201,11 +263,14 @@ export const environmentSchema = z
       }
       if (
         env.STORAGE_PROVIDER === "s3" &&
-        (!env.STORAGE_BUCKET || !env.S3_REGION)
+        !(
+          (env.STORAGE_BUCKET || env.OBJECT_STORAGE_BUCKET) &&
+          (env.S3_REGION || env.OBJECT_STORAGE_REGION)
+        )
       ) {
         ctx.addIssue({
           code: "custom",
-          path: ["STORAGE_BUCKET"],
+          path: ["OBJECT_STORAGE_BUCKET"],
           message: "S3 storage requires bucket and region.",
         });
       }

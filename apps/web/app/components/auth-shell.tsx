@@ -311,6 +311,12 @@ const navItems: Array<{
   },
   {
     roles: ["SUPER_ADMIN"],
+    href: "/system/infrastructure",
+    label: "Infrastructure",
+    icon: "settings",
+  },
+  {
+    roles: ["SUPER_ADMIN"],
     href: "/system/queues",
     label: "Queues",
     icon: "queues",

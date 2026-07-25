@@ -1,0 +1,82 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: campustest-migrate
+  namespace: campustest
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: campustest-runtime
+      containers:
+        - name: migrate
+          image: registry.example.invalid/campustest-api:COMMIT_SHA
+          command: ["npm", "run", "db:migrate:deploy"]
+          envFrom:
+            - configMapRef: { name: campustest-config }
+            - secretRef: { name: campustest-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: campustest-postgres-backup
+  namespace: campustest
+spec:
+  schedule: "15 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: campustest-runtime
+          containers:
+            - name: backup
+              image: registry.example.invalid/campustest-api:COMMIT_SHA
+              command: ["powershell", "-File", "scripts/backup-postgres.ps1"]
+              envFrom:
+                - secretRef: { name: campustest-secrets }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: campustest-report-cleanup
+  namespace: campustest
+spec:
+  schedule: "30 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cleanup
+              image: registry.example.invalid/campustest-worker:COMMIT_SHA
+              command: ["node", "apps/worker/dist/main.js"]
+              envFrom:
+                - configMapRef: { name: campustest-config }
+                - secretRef: { name: campustest-secrets }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: campustest-evidence-retention
+  namespace: campustest
+spec:
+  schedule: "45 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: retention
+              image: registry.example.invalid/campustest-worker:COMMIT_SHA
+              command: ["node", "apps/worker/dist/main.js"]
+              envFrom:
+                - configMapRef: { name: campustest-config }
+                - secretRef: { name: campustest-secrets }

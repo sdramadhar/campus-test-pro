@@ -219,6 +219,18 @@
 - Add integration tests for language validation, source limits, public run, final submit, hidden-test redaction, review actions, rejudge, score override, plagiarism workflow, and analytics.
 - Add code-runner security, operations, threat-model, local-setup, coding-assessment, and plagiarism documentation.
 
+## Phase 17 - Enterprise Infrastructure and Capacity Validation
+
+- Add provider-neutral target architecture, production topology, and staging topology documentation with Mermaid diagrams.
+- Add staging/production environment validation aliases and example files for app identity, URLs, pooled/direct database URLs, Redis, object storage, internal tokens, observability, feature flags, and code-runner configuration.
+- Harden production Dockerfiles with deterministic installs, non-root runtime users, health checks, immutable labels, and no secret-copy behavior.
+- Add Kubernetes manifests for namespace, service account, config map, secret references, deployments, services, ingress, HPAs, PDBs, NetworkPolicies, migration job, backup CronJob, report cleanup CronJob, and evidence-retention CronJob.
+- Add PgBouncer, reverse proxy, Prometheus, Grafana, alert, and enterprise-local compose foundations.
+- Add protected system infrastructure, capacity, deployment-safety, backups, alerts, maintenance enable/disable, and metrics-summary APIs plus `/system/infrastructure`.
+- Add CI hardening foundations for IaC validation, secret scan, CodeQL, Dependabot, container scan, and code-runner gateway image build.
+- Expand k6 load-test profiles and document capacity testing without claiming 5,000 concurrent support until staging results pass.
+- Add enterprise docs for database/Redis/object storage/CDN/TLS/secrets/monitoring/logging/alerting/backups/DR/restore/security audit/incident response/performance/read replicas/WAF/zero-downtime deployment.
+
 ## Verification
 
 - Install dependencies.
@@ -231,6 +243,7 @@
 - For Phase 10, also verify `/admin`, `/admin/students`, `/admin/faculty`, `/admin/departments`, `/admin/subjects`, `/admin/semesters`, `/admin/batches`, `/admin/college-settings`, `/admin/permissions`, `/admin/profile`, `/admin/notifications`, `/admin/audit-logs`, `/admin/activity`, and the `/api/v1/admin-panel/*` endpoints.
 - For Phase 11, also verify `/questions/ai-generate`, `/questions/ai-jobs`, `/questions/import-document`, `/admin/ai/prompts`, `/admin/ai/usage`, `/academic/syllabi`, Swagger, and the mock-provider review workflow.
 - For Phase 16, also verify `/student/coding-submissions`, `/coding/reviews`, `/coding/plagiarism`, `/system/code-runner`, `/admin/code-runner/languages`, `/analytics/coding`, API health/readiness/Swagger, and `http://localhost:4100/health` for the local mock gateway.
+- For Phase 17, also verify `/system/infrastructure`, `/api/v1/system/infrastructure`, `/api/v1/system/capacity`, `/api/v1/system/deployment-safety`, `/api/v1/system/backups`, `/api/v1/system/alerts`, `/api/v1/system/metrics-summary`, `/api/v1/system/metrics`, Kubernetes manifest validation, monitoring config, secret scan, and k6 smoke script syntax where tooling is available.
 - For Phase 12, also verify external provider configuration stays server-side, mock remains dev/test only, OCR defaults to disabled, image imports become OCR-required without Tesseract, edited AI results create version history, duplicate checks include semantic/fuzzy metadata, and approved questions remain `DRAFT`.
 - For Phase 13, also verify `/questions/ai-batch`, `/assessments/ai-paper`, `/assessments/random-sets`, batch progress/cancel/retry APIs, generated paper-set APIs, model-answer APIs, prompt rollback, validation reports, question analytics, notifications, Swagger, and worker/API readiness.
 - For Phase 14, also verify `/super-admin/analytics`, `/admin/analytics`, `/faculty/analytics`, `/student/analytics`, `/analytics/compare`, `/leaderboards`, `/reports/builder`, `/reports/jobs`, `/analytics/insights`, analytics/report APIs, report download audit, leaderboard policy, AI insight review, and the predictive analytics limitations notice.

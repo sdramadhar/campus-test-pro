@@ -9,6 +9,7 @@ const profiles = {
   200: { vus: 200, duration: "5m" },
   500: { vus: 500, duration: "10m" },
   1000: { vus: 1000, duration: "15m" },
+  2500: { vus: 2500, duration: "20m" },
   5000: { vus: 5000, duration: "30m" },
 };
 const selected = profiles[profile] || profiles.smoke;
@@ -80,6 +81,24 @@ export default function () {
   const attempt = start.json("data");
   http.get(`${baseUrl}/api/v1/student/attempts/${attempt.id}`, params);
   http.get(`${baseUrl}/api/v1/student/attempts/${attempt.id}/time`, params);
+  http.post(
+    `${baseUrl}/api/v1/student/attempts/${attempt.id}/proctoring/heartbeat`,
+    JSON.stringify({ clientTime: new Date().toISOString(), networkStatus: "ONLINE" }),
+    params,
+  );
+  http.post(
+    `${baseUrl}/api/v1/student/attempts/${attempt.id}/proctoring/events/batch`,
+    JSON.stringify({
+      events: [
+        {
+          eventType: "RECONNECT",
+          occurredAt: new Date().toISOString(),
+          metadata: { source: "k6" },
+        },
+      ],
+    }),
+    params,
+  );
   const firstQuestion = attempt.questions && attempt.questions[0];
   if (firstQuestion) {
     http.put(
@@ -113,5 +132,9 @@ export default function () {
     params,
   );
   http.get(`${baseUrl}/api/v1/student/results`, params);
+  http.get(`${baseUrl}/api/v1/student/coding-submissions`, params);
+  http.get(`${baseUrl}/api/v1/system/version`);
+  http.get(`${baseUrl}/health`);
+  http.get(`${baseUrl}/ready`);
   sleep(thinkTime);
 }

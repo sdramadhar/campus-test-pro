@@ -1,0 +1,27 @@
+# Scaling Results Template
+
+- Date:
+- Commit SHA:
+- Environment:
+- k6 profile:
+- VUs:
+- Duration:
+- Request count:
+- Error rate:
+- p95 latency:
+- p99 latency:
+- API replicas min/max/observed:
+- Worker replicas min/max/observed:
+- Web replicas min/max/observed:
+- Database CPU:
+- Database connections:
+- Redis latency:
+- Queue lag:
+- Worker throughput:
+- Code-runner throughput:
+- Answer-save failures:
+- Submission failures:
+- Autoscaling events:
+- Bottlenecks:
+- Result:
+- Approved capacity claim:
