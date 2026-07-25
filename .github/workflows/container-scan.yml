@@ -12,7 +12,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build API image
         run: docker build -f Dockerfile.api -t campustest-api:${{ github.sha }} .
       - name: Scan API image
