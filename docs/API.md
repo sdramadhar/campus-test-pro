@@ -87,3 +87,20 @@ Student-facing attempt and result responses are deliberately safe: they use perm
 - `POST /system/queues/remove`
 - `POST /system/queues/:queueName/pause`
 - `POST /system/queues/:queueName/resume`
+# Phase 11 AI Question Workflows
+
+AI generation, document import, duplicate detection, prompt templates, usage, and syllabi are documented in Swagger at `/api/docs`.
+
+Key routes:
+
+- `POST /api/v1/ai/questions/generate`
+- `GET /api/v1/ai/jobs`
+- `POST /api/v1/ai/jobs/:jobId/approve`
+- `POST /api/v1/ai/jobs/:jobId/reject`
+- `POST /api/v1/ai/jobs/:jobId/save-approved`
+- `POST /api/v1/question-imports/documents`
+- `POST /api/v1/questions/check-duplicate`
+- `PATCH /api/v1/question-duplicates/:id/review`
+- `GET|POST|PATCH /api/v1/syllabi`
+
+AI and imported questions are review-first and save to the existing Question Bank as `DRAFT`.

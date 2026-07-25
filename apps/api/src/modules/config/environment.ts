@@ -53,6 +53,21 @@ export const environmentSchema = z
       .default("disabled"),
     CODE_RUNNER_QUEUE: z.string().default("code-execution"),
     CODE_RUNNER_INTERNAL_URL: z.string().optional(),
+    AI_FEATURE_ENABLED: z.enum(["true", "false"]).default("true"),
+    AI_PROVIDER: z
+      .enum(["mock", "openai", "gemini", "anthropic"])
+      .default("mock"),
+    AI_ALLOW_MOCK_IN_NON_PRODUCTION: z.enum(["true", "false"]).default("true"),
+    AI_API_KEY: z.string().optional(),
+    AI_MODEL: z.string().default("campustest-mock-v1"),
+    AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+    AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+    AI_DAILY_LIMIT: z.coerce.number().int().positive().default(100),
+    AI_MONTHLY_LIMIT: z.coerce.number().int().positive().default(2000),
+    AI_MAX_QUESTIONS_PER_REQUEST: z.coerce.number().int().positive().default(10),
+    AI_DOCUMENT_MAX_BYTES: z.coerce.number().int().positive().default(5242880),
+    AI_DOCUMENT_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
+    OCR_PROVIDER: z.string().optional(),
     SWAGGER_ENABLED: z.enum(["true", "false"]).default("true"),
     MAINTENANCE_MODE: z.enum(["true", "false"]).default("false"),
     ALLOW_ADMIN_DURING_MAINTENANCE: z.enum(["true", "false"]).default("true"),
@@ -107,6 +122,24 @@ export const environmentSchema = z
           code: "custom",
           path: ["CODE_RUNNER_MODE"],
           message: "Mock code runner is not allowed in production.",
+        });
+      }
+      if (env.AI_PROVIDER === "mock") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["AI_PROVIDER"],
+          message: "Mock AI provider is not allowed in production.",
+        });
+      }
+      if (
+        env.AI_FEATURE_ENABLED === "true" &&
+        env.AI_PROVIDER !== "mock" &&
+        !env.AI_API_KEY
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["AI_API_KEY"],
+          message: "Configured AI provider requires a server-side API key.",
         });
       }
       if (env.EMAIL_PROVIDER !== "console" && !env.EMAIL_FROM) {

@@ -14,3 +14,6 @@
 - Result moderation requires a reason and stores moderation history; moderation holds prevent publication.
 - Security events remain review signals. Reviewers can mark attempts `NORMAL`, `FLAGGED`, `REVIEWED`, or `CLEARED`.
 - Redis is used for BullMQ and temporary operational state. Passwords, tokens, correct-answer keys, hidden test cases, and full student answers must not be stored in Redis job payloads.
+# Phase 11 AI Security Notes
+
+AI workflows keep provider secrets on the server, reject mock provider mode in production, sanitize provider errors, validate provider JSON, and treat imported document content as untrusted data. Duplicate detection is advisory only. See `docs/AI_SECURITY.md` and `docs/AI_PRIVACY.md`.

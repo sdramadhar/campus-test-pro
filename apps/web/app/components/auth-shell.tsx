@@ -167,6 +167,48 @@ const navItems: Array<{
   },
   {
     roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/questions/ai-generate",
+    label: "AI Generate",
+    icon: "questions",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/questions/ai-jobs",
+    label: "AI Jobs",
+    icon: "activity",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/questions/import-document",
+    label: "Document Import",
+    icon: "audit",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
+    href: "/academic/syllabi",
+    label: "Syllabi",
+    icon: "course",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/ai/prompts",
+    label: "AI Prompts",
+    icon: "settings",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/ai/usage",
+    label: "AI Usage",
+    icon: "operations",
+  },
+  {
+    roles: adminRoles,
+    href: "/admin/ai/settings",
+    label: "AI Settings",
+    icon: "permissions",
+  },
+  {
+    roles: ["SUPER_ADMIN", "COLLEGE_ADMIN", "FACULTY"],
     href: "/assessments",
     label: "Assessments",
     icon: "assessments",

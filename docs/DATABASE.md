@@ -37,3 +37,15 @@ Phase 8 adds:
 - Expiry job and atomic auto-submit claim fields on `TestAttempt`.
 
 These tables preserve PostgreSQL as the permanent source of truth. Redis/BullMQ improves scheduling and retry behavior, but delayed jobs are backed by database sweeps.
+# Phase 11 AI Data Model
+
+Phase 11 adds tables for:
+
+- `AiGenerationJob`, `AiGenerationRequest`, `AiGenerationResult`
+- `AiUsageRecord`, `AiReviewDecision`, `AiPromptTemplate`, `AiProviderFailure`
+- `DocumentImportJob`, `ImportedDocument`, `DocumentChunk`, `ExtractedQuestionCandidate`, `ImportValidationError`
+- `QuestionDuplicateCandidate`
+- `Syllabus`, `SyllabusUnit`, `SyllabusTopic`
+- `AssessmentBlueprint`
+
+These records are college-scoped where applicable and link back to existing users, subjects, questions, and assessments. Approved AI/import candidates create existing `Question` rows with `QuestionStatus.DRAFT`.

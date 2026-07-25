@@ -138,6 +138,19 @@
 - Preserve backend role guards and tenant isolation so College Admin users remain scoped to their own college.
 - Add responsive admin-panel pages with loading, success, empty, pagination, validation, and error states.
 
+## Phase 11 - AI Question Workflows
+
+- Add provider-agnostic AI abstractions for mock, OpenAI, Gemini, Anthropic, and future providers, with server-only keys, feature flags, timeout/retry handling, normalized errors, and production mock rejection.
+- Add Prisma persistence for AI generation jobs, requests, results, review decisions, usage, prompt templates, provider failures, document imports, chunks, extracted candidates, duplicate candidates, syllabi, syllabus topics, and assessment blueprints.
+- Add review-first APIs under `/api/v1/ai`, `/api/v1/question-imports`, `/api/v1/questions/check-duplicate`, `/api/v1/question-duplicates`, `/api/v1/syllabi`, and `/api/v1/assessment-blueprints`.
+- Require generated and imported questions to remain pending review until approved, and save approved questions into the existing Question Bank as `DRAFT`.
+- Add duplicate detection using normalized text and token similarity, with human reviewer override options.
+- Add Bloom taxonomy and difficulty suggestions with separate approved values stored in AI/import metadata.
+- Add safe document import foundations for TXT, CSV, XLSX, DOCX, and text PDFs; scanned PDFs/images are marked OCR-required unless a provider is configured.
+- Add AI prompt management, usage/settings visibility, quota checks, syllabus coverage, and blueprint foundations.
+- Add protected frontend routes for AI generation, jobs, review, document import, admin AI prompts/usage/settings, and syllabi.
+- Add integration tests for mock generation, student rejection, review gate, DRAFT save, document import, duplicates, syllabus coverage, and AI usage/settings.
+
 ## Verification
 
 - Install dependencies.
@@ -148,3 +161,4 @@
 - Verify frontend locally.
 - For Phase 9, also verify `/api/v1/system/version`, password reset, email development delivery, worker heartbeat, maintenance mode, and production Docker build validation where the local Docker runtime allows it.
 - For Phase 10, also verify `/admin`, `/admin/students`, `/admin/faculty`, `/admin/departments`, `/admin/subjects`, `/admin/semesters`, `/admin/batches`, `/admin/college-settings`, `/admin/permissions`, `/admin/profile`, `/admin/notifications`, `/admin/audit-logs`, `/admin/activity`, and the `/api/v1/admin-panel/*` endpoints.
+- For Phase 11, also verify `/questions/ai-generate`, `/questions/ai-jobs`, `/questions/import-document`, `/admin/ai/prompts`, `/admin/ai/usage`, `/academic/syllabi`, Swagger, and the mock-provider review workflow.

@@ -230,6 +230,13 @@ async function main(): Promise<void> {
       adminSession,
       studentSession,
     );
+    await runAiWorkflowTests(
+      baseUrl,
+      app.get(PrismaService),
+      adminSession,
+      mustGet(sessions, "FACULTY"),
+      studentSession,
+    );
 
     console.log("Auth integration tests passed.");
   } finally {
@@ -1749,6 +1756,191 @@ async function runProductionHardeningTests(
     503,
     "API refuses direct code execution when runner disabled",
   );
+}
+
+async function runAiWorkflowTests(
+  baseUrl: string,
+  prisma: PrismaService,
+  adminSession: TestSession,
+  facultySession: TestSession,
+  studentSession: TestSession,
+): Promise<void> {
+  const subject = await prisma.subject.findFirstOrThrow({
+    where: { collegeId: adminSession.body.user.collegeId ?? "" },
+  });
+
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/ai/questions/generate",
+      studentSession.cookie,
+      {
+        subjectId: subject.id,
+        topic: "Queues",
+        questionType: "SINGLE_CHOICE",
+        requestedCount: 1,
+      },
+    ),
+    403,
+    "student rejected from AI generation",
+  );
+
+  const generated = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/ai/questions/generate",
+    facultySession.cookie,
+    "POST",
+    {
+      subjectId: subject.id,
+      topic: "Queues",
+      questionType: "SINGLE_CHOICE",
+      requestedCount: 1,
+      difficulty: "MEDIUM",
+      bloomLevel: "UNDERSTAND",
+      marks: 2,
+      negativeMarks: 0,
+      language: "English",
+      avoidDuplicate: true,
+    },
+    201,
+    "faculty creates mock AI generation job",
+  );
+  const jobId = String(generated.id);
+  const completedJob = await pollJob(baseUrl, jobId, facultySession.cookie);
+  const results = completedJob.results as Array<Record<string, unknown>>;
+  assert(results.length >= 1, "mock provider generated review results");
+  assertEqual(
+    String(results[0]?.reviewStatus),
+    "PENDING",
+    "AI result starts in human review state",
+  );
+
+  const resultId = String(results[0]?.id);
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      `/api/v1/ai/jobs/${jobId}/approve`,
+      facultySession.cookie,
+      { resultIds: [resultId] },
+    ),
+    201,
+    "approve generated question",
+  );
+  const saved = await jsonRequest<Array<Record<string, unknown>>>(
+    baseUrl,
+    `/api/v1/ai/jobs/${jobId}/save-approved`,
+    facultySession.cookie,
+    "POST",
+    {},
+    201,
+    "approved generated question saved",
+  );
+  assertEqual(
+    String(saved[0]?.status),
+    "DRAFT",
+    "approved AI question is saved to Question Bank as DRAFT",
+  );
+
+  const duplicateResponse = await postJsonWithCookie(
+    baseUrl,
+    "/api/v1/questions/check-duplicate",
+    facultySession.cookie,
+    {
+      questionText: String(saved[0]?.questionText),
+      subjectId: subject.id,
+    },
+  );
+  assertEqual(duplicateResponse.status, 201, "duplicate check endpoint works");
+  const duplicateBody = (await duplicateResponse.json()) as {
+    data: Array<Record<string, unknown>>;
+  };
+  assert(
+    duplicateBody.data.length >= 1,
+    "duplicate detection returns an advisory candidate",
+  );
+
+  const importJob = await jsonRequest<Record<string, unknown>>(
+    baseUrl,
+    "/api/v1/question-imports/documents",
+    facultySession.cookie,
+    "POST",
+    {
+      subjectId: subject.id,
+      fileName: "integration-questions.txt",
+      mimeType: "text/plain",
+      sizeBytes: 64,
+      content: "Question 1: What is FIFO?\nQuestion 2: What is enqueue?",
+    },
+    201,
+    "document import creates candidates",
+  );
+  assertEqual(
+    String(importJob.status),
+    "EXTRACTED",
+    "TXT import extracts text without OCR",
+  );
+
+  await expectStatus(
+    postJsonWithCookie(
+      baseUrl,
+      "/api/v1/question-imports/documents",
+      facultySession.cookie,
+      {
+        subjectId: subject.id,
+        fileName: "scan.png",
+        mimeType: "image/png",
+        sizeBytes: 64,
+        content: "fake-image",
+      },
+    ),
+    201,
+    "image import is accepted as OCR-required job",
+  );
+
+  const syllabi = await getList(baseUrl, "/api/v1/syllabi", facultySession.cookie);
+  assert(syllabi.length >= 1, "syllabus list is tenant scoped");
+  const syllabusId = String(syllabi[0]?.id);
+  const coverageResponse = await fetch(
+    `${baseUrl}/api/v1/syllabi/${syllabusId}/coverage`,
+    { headers: { Cookie: facultySession.cookie } },
+  );
+  assertEqual(coverageResponse.status, 200, "syllabus coverage endpoint works");
+
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/ai/usage`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "admin can view AI usage",
+  );
+  await expectStatus(
+    fetch(`${baseUrl}/api/v1/ai/settings`, {
+      headers: { Cookie: adminSession.cookie },
+    }),
+    200,
+    "admin can view AI settings",
+  );
+}
+
+async function pollJob(
+  baseUrl: string,
+  jobId: string,
+  cookie: string,
+): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await fetch(`${baseUrl}/api/v1/ai/jobs/${jobId}`, {
+      headers: { Cookie: cookie },
+    });
+    if (!response.ok) {
+      throw new Error(`Assertion failed: poll AI job. ${await response.text()}`);
+    }
+    const body = (await response.json()) as { data: Record<string, unknown> };
+    if (String(body.data.status) === "COMPLETED") {
+      return body.data;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Assertion failed: AI job did not complete.");
 }
 
 async function postJson(

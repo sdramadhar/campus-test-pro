@@ -1011,6 +1011,64 @@ h1 {
   width: auto;
 }
 
+.ai-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.ai-status-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.ai-status-grid span {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 0.75rem;
+}
+
+.ai-card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.ai-question-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.ai-question-card h3 {
+  font-size: 1rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ai-question-card pre {
+  background: var(--surface);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0;
+  overflow: auto;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.ai-job-row,
+.ai-import-row,
+.ai-prompt-row,
+.ai-syllabus-row {
+  grid-template-columns: 1.4fr 0.9fr 0.8fr 1fr;
+}
+
 :root[data-theme="dark"] .login-panel,
 :root[data-theme="dark"] .panel,
 :root[data-theme="dark"] .metrics article,

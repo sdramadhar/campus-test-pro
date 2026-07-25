@@ -217,6 +217,45 @@ Phase 8 seed data adds an expired attempt for auto-submit recovery, job records,
 
 Phase 10 seed data adds Demo College admin settings, admin-panel notifications, activity-history records, and a development permission override.
 
+Phase 11 AI workflow routes:
+
+- `POST /api/v1/ai/questions/generate`
+- `GET /api/v1/ai/jobs`
+- `GET /api/v1/ai/jobs/:jobId`
+- `POST /api/v1/ai/jobs/:jobId/cancel`
+- `POST /api/v1/ai/jobs/:jobId/regenerate`
+- `POST /api/v1/ai/jobs/:jobId/approve`
+- `POST /api/v1/ai/jobs/:jobId/reject`
+- `POST /api/v1/ai/jobs/:jobId/save-approved`
+- `GET|POST|PATCH|DELETE /api/v1/ai/prompts`
+- `GET /api/v1/ai/usage`
+- `GET|PATCH /api/v1/ai/settings`
+- `POST /api/v1/question-imports/documents`
+- `GET /api/v1/question-imports/jobs`
+- `GET|POST|DELETE /api/v1/question-imports/jobs/:jobId`
+- `POST /api/v1/questions/check-duplicate`
+- `GET /api/v1/questions/:id/duplicates`
+- `PATCH /api/v1/question-duplicates/:id/review`
+- `GET|POST|PATCH /api/v1/syllabi`
+- `GET /api/v1/syllabi/:id/coverage`
+
+Phase 11 frontend routes:
+
+- `/questions/ai-generate`
+- `/questions/ai-jobs`
+- `/questions/ai-jobs/[jobId]`
+- `/questions/ai-review/[jobId]`
+- `/questions/import-document`
+- `/questions/import-document/jobs`
+- `/questions/import-document/jobs/[jobId]`
+- `/admin/ai/prompts`
+- `/admin/ai/usage`
+- `/admin/ai/settings`
+- `/academic/syllabi`
+- `/academic/syllabi/[id]/coverage`
+
+AI defaults are development-only. `AI_PROVIDER=mock` creates deterministic sample questions for local testing and is rejected in production. AI output and document-extracted candidates must be reviewed by a human and are saved into the Question Bank as `DRAFT`, never as active questions.
+
 Coding questions store test cases and hidden-case metadata, but CampusTest Pro does not execute untrusted code yet. Browser exam events are review signals only; they do not automatically declare misconduct.
 
 ## Verification Commands
