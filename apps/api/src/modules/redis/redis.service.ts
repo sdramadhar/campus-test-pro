@@ -7,7 +7,7 @@ export class RedisService implements OnModuleDestroy {
 
   constructor() {
     this.client = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-      lazyConnect: false,
+      lazyConnect: true,
       maxRetriesPerRequest: 2,
     });
   }

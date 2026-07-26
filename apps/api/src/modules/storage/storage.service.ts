@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { Role } from '../../../generated/phase5-client';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -29,6 +35,11 @@ export class StorageService {
       throw new BadRequestException('File size is outside the allowed range.');
     }
     const current = env();
+    if (!this.storageAvailable(current)) {
+      throw new ServiceUnavailableException(
+        'Object storage is not configured for this deployment.',
+      );
+    }
     const tenantPrefix = user.collegeId ?? 'global';
     const objectKey = `${tenantPrefix}/${input.purpose}/${randomBytes(16).toString('hex')}`;
     const object = await this.prisma.storageObject.create({
@@ -58,5 +69,20 @@ export class StorageService {
         headers: { 'Content-Type': input.mimeType }
       }
     };
+  }
+
+  private storageAvailable(current: ReturnType<typeof env>): boolean {
+    if (current.STORAGE_PROVIDER === 'disabled') {
+      return false;
+    }
+    if (current.STORAGE_PROVIDER === 'local') {
+      return true;
+    }
+    return Boolean(
+      (current.STORAGE_BUCKET || current.OBJECT_STORAGE_BUCKET) &&
+        (current.S3_REGION || current.OBJECT_STORAGE_REGION) &&
+        (current.S3_ACCESS_KEY_ID || current.OBJECT_STORAGE_ACCESS_KEY) &&
+        (current.S3_SECRET_ACCESS_KEY || current.OBJECT_STORAGE_SECRET_KEY),
+    );
   }
 }

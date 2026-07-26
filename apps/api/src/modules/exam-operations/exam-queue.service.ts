@@ -26,19 +26,12 @@ export class ExamQueueService implements OnModuleDestroy {
     this.connection = new Redis(
       process.env.REDIS_URL ?? "redis://localhost:6379",
       {
+        lazyConnect: true,
         maxRetriesPerRequest: null,
         enableReadyCheck: false,
       },
     );
-    this.queues = new Map(
-      queueNames.map((name) => [
-        name,
-        new Queue(name, {
-          connection: this.connection,
-          prefix: "campustest",
-        }),
-      ]),
-    );
+    this.queues = new Map();
   }
 
   async scheduleAttemptExpiry(
@@ -138,10 +131,18 @@ export class ExamQueueService implements OnModuleDestroy {
 
   getQueue(name: QueueName): Queue {
     const queue = this.queues.get(name);
-    if (!queue) {
+    if (queue) {
+      return queue;
+    }
+    if (!queueNames.includes(name)) {
       throw new Error(`Unknown queue ${name}`);
     }
-    return queue;
+    const created = new Queue(name, {
+      connection: this.connection,
+      prefix: "campustest",
+    });
+    this.queues.set(name, created);
+    return created;
   }
 
   async onModuleDestroy(): Promise<void> {

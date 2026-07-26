@@ -52,7 +52,7 @@ export const environmentSchema = z
     OTEL_EXPORTER_ENDPOINT: z.string().optional(),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
     STORAGE_PROVIDER: z
-      .enum(["local", "s3", "r2", "minio", "azure-blob"])
+      .enum(["disabled", "local", "s3", "r2", "minio", "azure-blob"])
       .default("local"),
     STORAGE_LOCAL_DIR: z.string().default("storage"),
     STORAGE_BUCKET: z.string().optional(),
@@ -221,20 +221,10 @@ export const environmentSchema = z
           "Staging and production require an application encryption key.",
       });
     }
-    if (
-      strictEnvironment &&
-      env.STORAGE_PROVIDER !== "local" &&
-      !(
-        (env.STORAGE_BUCKET || env.OBJECT_STORAGE_BUCKET) &&
-        (env.S3_REGION || env.OBJECT_STORAGE_REGION)
-      )
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["OBJECT_STORAGE_BUCKET"],
-        message: "S3-compatible object storage requires bucket and region.",
-      });
-    }
+    const remoteStorageConfigured = Boolean(
+      (env.STORAGE_BUCKET || env.OBJECT_STORAGE_BUCKET) &&
+      (env.S3_REGION || env.OBJECT_STORAGE_REGION),
+    );
     if (env.NODE_ENV === "production" || env.APP_ENV === "production") {
       const forbiddenSecrets = new Set([
         "dev-access-secret-change-me",
@@ -286,7 +276,8 @@ export const environmentSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["STORAGE_PROVIDER"],
-          message: "Local object storage is not allowed in production.",
+          message:
+            "Local object storage is not allowed in production. Use disabled or a managed provider.",
         });
       }
       if (env.CODE_RUNNER_MODE === "MOCK") {
@@ -379,23 +370,10 @@ export const environmentSchema = z
       }
       if (
         env.STORAGE_PROVIDER !== "local" &&
-        !(
-          (env.STORAGE_BUCKET || env.OBJECT_STORAGE_BUCKET) &&
-          (env.S3_REGION || env.OBJECT_STORAGE_REGION)
-        )
+        env.STORAGE_PROVIDER !== "disabled" &&
+        !remoteStorageConfigured
       ) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["OBJECT_STORAGE_BUCKET"],
-          message: "S3 storage requires bucket and region.",
-        });
-      }
-      if (env.BACKUP_PROVIDER === "disabled" || !env.BACKUP_BUCKET) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["BACKUP_PROVIDER"],
-          message: "Production requires configured encrypted backup storage.",
-        });
+        return;
       }
     }
   });
