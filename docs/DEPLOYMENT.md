@@ -26,6 +26,7 @@ Provider option A: Render-style managed platform
 
 - Web service for Next.js.
 - API web service for NestJS.
+- API build command: `npm ci --include=dev && npm run db:generate && npm run build --workspace apps/api`.
 - Background worker service.
 - Managed PostgreSQL and Redis.
 - Environment-scoped secrets.
