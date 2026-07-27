@@ -381,6 +381,7 @@ export const environmentSchema = z
 export type AppEnvironment = z.infer<typeof environmentSchema>;
 
 let cached: AppEnvironment | null = null;
+let warnedDisabledBackup = false;
 
 export function validateEnvironment(
   source: NodeJS.ProcessEnv = process.env,
@@ -391,6 +392,17 @@ export function validateEnvironment(
       .map((issue) => `${issue.path.join(".") || "env"}: ${issue.message}`)
       .join("; ");
     throw new Error(`Invalid CampusTest environment configuration. ${detail}`);
+  }
+  if (
+    (parsed.data.NODE_ENV === "production" ||
+      parsed.data.APP_ENV === "production") &&
+    parsed.data.BACKUP_PROVIDER === "disabled" &&
+    !warnedDisabledBackup
+  ) {
+    warnedDisabledBackup = true;
+    console.warn(
+      "Automated backup is disabled for this production deployment.",
+    );
   }
   cached = parsed.data;
   return parsed.data;
