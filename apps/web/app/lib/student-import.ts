@@ -104,7 +104,7 @@ export function parseStudentImportWorkbook(
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     defval: "",
     header: 1,
-    raw: false,
+    raw: true,
   });
   return parseStudentImportTable(rows);
 }
@@ -209,7 +209,9 @@ function rowToRecord(
   const record: Partial<Record<StudentImportColumn, string>> = {};
   headers.forEach((header, index) => {
     if (studentImportColumns.includes(header as StudentImportColumn)) {
-      record[header as StudentImportColumn] = normalizeCell(row[index]);
+      const column = header as StudentImportColumn;
+      record[column] =
+        column === "dob" ? normalizeDateCell(row[index]) : normalizeCell(row[index]);
     }
   });
   return record;
@@ -254,7 +256,7 @@ function validateRecord(
   if (record.email && !emailPattern.test(record.email)) {
     errors.push({ row, field: "email", message: "Invalid email address." });
   }
-  if (record.dob && Number.isNaN(Date.parse(record.dob))) {
+  if (record.dob && !isIsoDate(record.dob)) {
     errors.push({ row, field: "dob", message: "Invalid date." });
   }
   if (
@@ -270,6 +272,104 @@ function validateRecord(
     });
   }
   return errors;
+}
+
+function normalizeDateCell(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  if (value instanceof Date) {
+    return formatIsoDate(value);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return excelSerialToIsoDate(value) ?? String(value);
+  }
+  const text = stringCell(value).trim();
+  if (!text) {
+    return "";
+  }
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    return excelSerialToIsoDate(Number(text)) ?? text;
+  }
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (iso) {
+    return validDateParts(Number(iso[1]), Number(iso[2]), Number(iso[3]))
+      ? text
+      : text;
+  }
+  const dayFirst = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(text);
+  if (dayFirst) {
+    const day = Number(dayFirst[1]);
+    const month = Number(dayFirst[2]);
+    const year = Number(dayFirst[3]);
+    return validDateParts(year, month, day)
+      ? `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+      : text;
+  }
+  return text;
+}
+
+function excelSerialToIsoDate(serial: number): string | null {
+  if (!Number.isFinite(serial) || serial <= 0) {
+    return null;
+  }
+  const parsed = parseExcelDateCode(serial);
+  if (
+    !parsed ||
+    !validDateParts(parsed.year, parsed.month, parsed.day)
+  ) {
+    return null;
+  }
+  return `${String(parsed.year).padStart(4, "0")}-${String(
+    parsed.month,
+  ).padStart(2, "0")}-${String(parsed.day).padStart(2, "0")}`;
+}
+
+function parseExcelDateCode(
+  serial: number,
+): { year: number; month: number; day: number } | null {
+  const ssf = XLSX.SSF as unknown as {
+    parse_date_code?: (value: number) => unknown;
+  };
+  const parsed = ssf.parse_date_code?.(serial);
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+  const values = parsed as { y?: unknown; m?: unknown; d?: unknown };
+  if (
+    typeof values.y !== "number" ||
+    typeof values.m !== "number" ||
+    typeof values.d !== "number"
+  ) {
+    return null;
+  }
+  return { year: values.y, month: values.m, day: values.d };
+}
+
+function formatIsoDate(date: Date): string {
+  return `${String(date.getFullYear()).padStart(4, "0")}-${String(
+    date.getMonth() + 1,
+  ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function isIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  return validDateParts(Number(match[1]), Number(match[2]), Number(match[3]));
+}
+
+function validDateParts(year: number, month: number, day: number): boolean {
+  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+  const date = new Date(year, month - 1, day);
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
 }
 
 function toStudent(

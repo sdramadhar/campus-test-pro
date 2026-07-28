@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import * as XLSX from "xlsx";
 import {
   parseStudentImportCsv,
+  parseStudentImportTable,
   parseStudentImportWorkbook,
   runStudentImportTask,
   studentImportColumns,
@@ -37,6 +38,9 @@ async function main(): Promise<void> {
   filePickerIsConfigured();
   csvParsing();
   xlsxParsing();
+  dobFormatParsing();
+  excelDateCellParsing();
+  excelSerialDateParsing();
   missingColumnValidation();
   successfulSingleStudentUploadPayload();
   console.log("Student import parser tests passed.");
@@ -97,6 +101,34 @@ function xlsxParsing(): void {
   assert.equal(result.payload.students[0]?.rollNumber, validRow.rollNumber);
 }
 
+function dobFormatParsing(): void {
+  for (const dob of ["10-12-2006", "10/12/2006", "10.12.2006", "2006-12-10"]) {
+    const result = parseStudentImportCsv(csvWithDob(dob));
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.payload.students[0]?.dob, "2006-12-10");
+  }
+
+  const invalid = parseStudentImportCsv(csvWithDob("31-02-2006"));
+  assert.equal(invalid.payload.students.length, 0);
+  assert(
+    invalid.errors.some(
+      (error) => error.field === "dob" && error.message === "Invalid date.",
+    ),
+  );
+}
+
+function excelDateCellParsing(): void {
+  const result = parseStudentImportTableWithDob(new Date(2006, 11, 10));
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.payload.students[0]?.dob, "2006-12-10");
+}
+
+function excelSerialDateParsing(): void {
+  const result = parseStudentImportTableWithDob(39061);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.payload.students[0]?.dob, "2006-12-10");
+}
+
 function missingColumnValidation(): void {
   const result = parseStudentImportCsv("rollNumber,studentId\nA,1");
   assert(result.missingColumns.includes("email"));
@@ -110,6 +142,22 @@ function successfulSingleStudentUploadPayload(): void {
   ].join("\n");
   const result = parseStudentImportCsv(csv);
   assert.deepEqual(result.payload, { students: [validRow] });
+}
+
+function csvWithDob(dob: string): string {
+  return [
+    studentImportColumns.join(","),
+    studentImportColumns
+      .map((column) => String(column === "dob" ? dob : validRow[column]))
+      .join(","),
+  ].join("\n");
+}
+
+function parseStudentImportTableWithDob(dob: Date | number) {
+  const row = studentImportColumns.map((column) =>
+    column === "dob" ? dob : validRow[column],
+  );
+  return parseStudentImportTable([[...studentImportColumns], row]);
 }
 
 function toArrayBuffer(bytes: ArrayBuffer | Uint8Array): ArrayBuffer {
