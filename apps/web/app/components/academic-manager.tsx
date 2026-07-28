@@ -10,7 +10,7 @@ import {
   Upload,
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   academicRequest,
   EntityConfig,
@@ -27,6 +27,12 @@ import {
   isJsonResponse,
   responseErrorMessage,
 } from "../lib/api-client";
+import {
+  parseStudentImportCsv,
+  parseStudentImportWorkbook,
+  runStudentImportTask,
+  StudentImportParseResult,
+} from "../lib/student-import";
 
 type LookupMap = Partial<Record<EntityKey, EntityRecord[]>>;
 
@@ -47,7 +53,8 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
   );
   const [message, setMessage] = useState("");
   const [bulkText, setBulkText] = useState("");
-  const [bulkState, setBulkState] = useState<"idle" | "importing">("idle");
+  const [bulkState, setBulkState] = useState<"idle" | "json" | "file">("idle");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const schema = useMemo(() => schemaFor(config), [config]);
 
@@ -184,34 +191,63 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
     URL.revokeObjectURL(url);
   }
 
+  async function importPayload(payload: unknown): Promise<void> {
+    const result = await academicRequest<{
+      imported: number;
+      skipped?: number;
+      errors?: Array<{ field?: string; message?: string; row?: number }>;
+      success: true;
+    }>("/api/v1/students/bulk", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    setMessage(importSuccessMessage(result));
+    await load();
+  }
+
   async function bulkCreate(): Promise<void> {
-    if (bulkState === "importing") {
+    if (bulkState !== "idle") {
       return;
     }
-    setBulkState("importing");
     setMessage("");
-    try {
-      const parsed = JSON.parse(bulkText) as unknown;
-      const result = await academicRequest<{
-        imported: number;
-        success: true;
-      }>("/api/v1/students/bulk", {
-        method: "POST",
-        body: JSON.stringify(parsed),
-      });
-      setBulkText("");
-      setMessage(`Imported ${String(result.imported)} student(s).`);
-      await load();
-    } catch (error) {
-      setMessage(
-        error instanceof SyntaxError
-          ? "Student import failed. Check that the payload is valid JSON."
-          : error instanceof Error
-            ? error.message
-            : "Student import failed.",
-      );
-    } finally {
-      setBulkState("idle");
+    await runStudentImportTask("json", setBulkState, async () => {
+      try {
+        const parsed = JSON.parse(bulkText) as unknown;
+        await importPayload(parsed);
+        setBulkText("");
+      } catch (error) {
+        setMessage(
+          error instanceof SyntaxError
+            ? "Student import failed. Check that the payload is valid JSON."
+            : error instanceof Error
+              ? error.message
+              : "Student import failed.",
+        );
+      }
+    });
+  }
+
+  async function uploadStudents(file: File): Promise<void> {
+    if (bulkState !== "idle") {
+      return;
+    }
+    setMessage("");
+    await runStudentImportTask("file", setBulkState, async () => {
+      try {
+        const parsed = await parseStudentImportFile(file);
+        if (parsed.errors.length > 0) {
+          setMessage(formatImportValidation(parsed));
+          return;
+        }
+        await importPayload(parsed.payload);
+      } catch (error) {
+        setMessage(
+          error instanceof Error ? error.message : "Student upload failed.",
+        );
+      }
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   }
 
@@ -355,20 +391,46 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
             placeholder='{"students":[{"rollNumber":"CSE-2026-002","studentId":"STU-1002",...}]}'
             value={bulkText}
           />
+          <input
+            accept=".xlsx,.xls,.csv"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void uploadStudents(file);
+              }
+            }}
+            ref={fileInputRef}
+            type="file"
+          />
           <div className="form-actions">
             <button
-              disabled={bulkState === "importing"}
+              disabled={bulkState !== "idle"}
               onClick={() => {
                 void bulkCreate();
               }}
               type="button"
             >
-              {bulkState === "importing" ? (
+              {bulkState === "json" ? (
                 <Loader2 className="spin" size={18} />
               ) : (
                 <Upload size={18} />
               )}
-              {bulkState === "importing" ? "Importing..." : "Import"}
+              {bulkState === "json" ? "Importing..." : "Import JSON"}
+            </button>
+            <button
+              disabled={bulkState !== "idle"}
+              onClick={() => {
+                fileInputRef.current?.click();
+              }}
+              type="button"
+            >
+              {bulkState === "file" ? (
+                <Loader2 className="spin" size={18} />
+              ) : (
+                <Upload size={18} />
+              )}
+              {bulkState === "file" ? "Importing..." : "Upload Excel/CSV"}
             </button>
             <button
               onClick={() => {
@@ -386,7 +448,7 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
               type="button"
             >
               <Download size={18} />
-              Template
+              Download Template
             </button>
             <button
               onClick={() => {
@@ -402,7 +464,7 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
               type="button"
             >
               <Download size={18} />
-              Export
+              Export Students
             </button>
           </div>
         </section>
@@ -504,6 +566,69 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
       </section>
     </>
   );
+}
+
+async function parseStudentImportFile(
+  file: File,
+): Promise<StudentImportParseResult> {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension === "csv") {
+    return parseStudentImportCsv(await file.text());
+  }
+  if (extension === "xlsx" || extension === "xls") {
+    return parseStudentImportWorkbook(await file.arrayBuffer());
+  }
+  throw new Error("Upload a .xlsx, .xls, or .csv file.");
+}
+
+function formatImportValidation(result: StudentImportParseResult): string {
+  const messages = result.errors.map((error) =>
+    [
+      error.row ? `Row ${String(error.row)}` : "",
+      error.field,
+      error.message,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (result.missingColumns.length > 0) {
+    messages.unshift(`Missing columns: ${result.missingColumns.join(", ")}.`);
+  }
+  return messages.join(" ");
+}
+
+function importSuccessMessage(result: {
+  imported: number;
+  skipped?: number;
+  errors?: Array<{ field?: string; message?: string; row?: number }>;
+}): string {
+  const duplicateCount =
+    result.errors?.filter((error) =>
+      `${error.field ?? ""} ${error.message ?? ""}`
+        .toLowerCase()
+        .includes("duplicate"),
+    ).length ?? 0;
+  const parts = [
+    `Imported ${String(result.imported)} student(s).`,
+    `Skipped ${String(result.skipped ?? 0)}.`,
+    `Duplicates ${String(duplicateCount)}.`,
+  ];
+  if (result.errors?.length) {
+    parts.push(
+      result.errors
+        .map((error) =>
+          [
+            error.row ? `Row ${String(error.row)}` : "",
+            error.field,
+            error.message,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        )
+        .join(" "),
+    );
+  }
+  return parts.join(" ");
 }
 
 function initialForm(config: EntityConfig): Record<string, string> {
