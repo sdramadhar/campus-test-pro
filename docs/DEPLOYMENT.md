@@ -27,10 +27,11 @@ Provider option A: Render-style managed platform
 - Web service for Next.js.
 - API web service for NestJS.
 - API build command: `npm ci --include=dev && npm run db:generate && npm run build --workspace apps/api`.
+- API start command: `npm run render:api:start`.
 - Background worker service.
 - Managed PostgreSQL and Redis.
 - Environment-scoped secrets.
-- Release command: `npm run db:migrate:deploy`.
+- API startup runs `prisma migrate deploy`, then the idempotent production demo-user seed, then starts NestJS.
 
 Provider option B: AWS ECS/Fargate or Kubernetes
 

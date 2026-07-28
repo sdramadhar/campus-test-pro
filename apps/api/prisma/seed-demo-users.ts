@@ -43,20 +43,17 @@ const demoUsers = [
   },
 ] as const;
 
-async function upsertDemoUser(input: (typeof demoUsers)[number], collegeId?: string) {
-  const passwordHash = await argon2.hash(input.password);
-  return prisma.user.upsert({
+async function ensureDemoUser(input: (typeof demoUsers)[number], collegeId?: string) {
+  const existing = await prisma.user.findUnique({
     where: { email: input.email },
-    update: {
-      name: input.name,
-      role: input.role,
-      passwordHash,
-      studentId: input.studentId,
-      collegeId,
-      isActive: true,
-      mustChangePassword: false,
-    },
-    create: {
+  });
+  if (existing) {
+    return existing;
+  }
+
+  const passwordHash = await argon2.hash(input.password);
+  return prisma.user.create({
+    data: {
       email: input.email,
       name: input.name,
       role: input.role,
@@ -70,50 +67,36 @@ async function upsertDemoUser(input: (typeof demoUsers)[number], collegeId?: str
 }
 
 async function main(): Promise<void> {
-  const superAdmin = await upsertDemoUser(demoUsers[0]);
+  const superAdmin = await ensureDemoUser(demoUsers[0]);
 
-  const demoCollege = await prisma.college.upsert({
+  const existingCollege = await prisma.college.findUnique({
     where: { collegeCode: "DEMO" },
-    update: {
-      slug: "demo-college",
-      name: "Demo College",
-      email: "info@demo-college.local",
-      phone: "+1 555 0101",
-      website: "https://demo-college.local",
-      addressLine1: "1 Campus Green",
-      addressLine2: "Administration Block",
-      city: "Springfield",
-      state: "Illinois",
-      postalCode: "62701",
-      country: "United States",
-      status: CollegeStatus.ACTIVE,
-      isActive: true,
-      deletedAt: null,
-      createdById: superAdmin.id,
-      updatedById: superAdmin.id,
-    },
-    create: {
-      slug: "demo-college",
-      collegeCode: "DEMO",
-      name: "Demo College",
-      email: "info@demo-college.local",
-      phone: "+1 555 0101",
-      website: "https://demo-college.local",
-      addressLine1: "1 Campus Green",
-      addressLine2: "Administration Block",
-      city: "Springfield",
-      state: "Illinois",
-      postalCode: "62701",
-      country: "United States",
-      status: CollegeStatus.ACTIVE,
-      isActive: true,
-      createdById: superAdmin.id,
-      updatedById: superAdmin.id,
-    },
   });
+  const demoCollege =
+    existingCollege ??
+    (await prisma.college.create({
+      data: {
+        slug: "demo-college",
+        collegeCode: "DEMO",
+        name: "Demo College",
+        email: "info@demo-college.local",
+        phone: "+1 555 0101",
+        website: "https://demo-college.local",
+        addressLine1: "1 Campus Green",
+        addressLine2: "Administration Block",
+        city: "Springfield",
+        state: "Illinois",
+        postalCode: "62701",
+        country: "United States",
+        status: CollegeStatus.ACTIVE,
+        isActive: true,
+        createdById: superAdmin.id,
+        updatedById: superAdmin.id,
+      },
+    }));
 
   await Promise.all(
-    demoUsers.slice(1).map((user) => upsertDemoUser(user, demoCollege.id)),
+    demoUsers.slice(1).map((user) => ensureDemoUser(user, demoCollege.id)),
   );
 
   console.log("Seeded production-safe demo college and login users.");

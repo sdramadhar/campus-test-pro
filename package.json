@@ -21,6 +21,7 @@
     "db:migrate:status": "npm --workspace apps/api exec prisma migrate status",
     "db:seed": "npm run prisma:seed --workspace apps/api",
     "db:seed:dev": "npm run prisma:seed:full --workspace apps/api",
+    "render:api:start": "npm run db:migrate:deploy && npm run db:seed && npm run start --workspace apps/api",
     "db:backup": "powershell -ExecutionPolicy Bypass -File scripts/backup-postgres.ps1",
     "db:restore:docs": "powershell -ExecutionPolicy Bypass -File scripts/restore-postgres.ps1 -Help",
     "docker:build": "docker build -f Dockerfile.api -t campustest-api:local . && docker build -f Dockerfile.web -t campustest-web:local . && docker build -f Dockerfile.worker -t campustest-worker:local . && docker build -f apps/code-runner-gateway/Dockerfile -t campustest-code-runner-gateway:local .",
