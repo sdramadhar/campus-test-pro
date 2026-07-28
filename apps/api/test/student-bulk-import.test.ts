@@ -52,14 +52,46 @@ function prisma(overrides: Record<string, unknown> = {}) {
         return { id: `profile-${String(calls.profiles)}` };
       },
     },
-    department: { findMany: async () => [{ id: "department-1" }] },
-    course: { findMany: async () => [{ id: "course-1" }] },
+    department: {
+      findMany: async () => [
+        {
+          id: "department-1",
+          departmentName: "Computer Science",
+          departmentCode: "CSE",
+        },
+      ],
+    },
+    course: {
+      findMany: async () => [
+        {
+          id: "course-1",
+          courseName: "B.Tech CSE",
+          shortName: "BE",
+          code: "COURSE-CSE",
+          title: "B.Tech CSE",
+        },
+      ],
+    },
     semester: {
-      findMany: async () => [{ id: "semester-1", courseId: "course-1" }],
+      findMany: async () => [
+        {
+          id: "semester-1",
+          semesterName: "Semester 2",
+          semesterNumber: 2,
+          courseId: "course-1",
+        },
+      ],
     },
     batch: {
       findMany: async () => [
-        { id: "batch-1", courseId: "course-1", semesterId: "semester-1" },
+        {
+          id: "batch-1",
+          batchName: "2026 BE A",
+          academicYear: 2026,
+          section: "A",
+          courseId: "course-1",
+          semesterId: "semester-1",
+        },
       ],
     },
     $transaction: async (input: unknown) => {
@@ -102,6 +134,22 @@ async function main(): Promise<void> {
 
   mock = prisma();
   service = new AcademicService(mock.client as never);
+  const nameResult = await service.bulkCreateStudents(user, {
+    students: [
+      {
+        ...validStudent,
+        departmentId: " computer science ",
+        courseId: "b.tech cse",
+        semesterId: "semester 2",
+        batchId: "2026 be a",
+      },
+    ],
+  });
+  assert.equal(nameResult.success, true);
+  assert.equal(nameResult.imported, 1);
+
+  mock = prisma();
+  service = new AcademicService(mock.client as never);
   await expectThrows(
     service,
     { students: [{ rollNumber: "ONLY" }] },
@@ -119,7 +167,22 @@ async function main(): Promise<void> {
     },
   });
   service = new AcademicService(mock.client as never);
-  await expectThrows(service, { students: [validStudent] }, ConflictException);
+  await assert.rejects(
+    service.bulkCreateStudents(user, { students: [validStudent] }),
+    (error) => {
+      assert(error instanceof ConflictException);
+      const response = error.getResponse() as {
+        skipped: number;
+        errors: Array<{ message: string }>;
+      };
+      assert.equal(response.skipped, 1);
+      assert.equal(
+        response.errors[0]?.message,
+        "This student already exists and was skipped.",
+      );
+      return true;
+    },
+  );
 
   mock = prisma();
   service = new AcademicService(mock.client as never);
@@ -132,6 +195,62 @@ async function main(): Promise<void> {
   mock = prisma({ batch: { findMany: async () => [] } });
   service = new AcademicService(mock.client as never);
   await expectThrows(service, { students: [validStudent] }, BadRequestException);
+
+  mock = prisma({
+    department: {
+      findMany: async (args: { where: { collegeId: string } }) => {
+        assert.equal(args.where.collegeId, collegeId);
+        return [
+          {
+            id: "department-1",
+            departmentName: "Computer Science",
+            departmentCode: "CSE",
+          },
+        ];
+      },
+    },
+  });
+  service = new AcademicService(mock.client as never);
+  await service.bulkCreateStudents(user, {
+    students: [{ ...validStudent, departmentId: "Computer Science" }],
+  });
+
+  mock = prisma({
+    department: {
+      findMany: async () => [
+        {
+          id: "department-1",
+          departmentName: "Computer Science",
+          departmentCode: "CSE",
+        },
+        {
+          id: "department-2",
+          departmentName: "Computer Science",
+          departmentCode: "CS",
+        },
+      ],
+    },
+  });
+  service = new AcademicService(mock.client as never);
+  await assert.rejects(
+    service.bulkCreateStudents(user, {
+      students: [{ ...validStudent, departmentId: "Computer Science" }],
+    }),
+    (error) => {
+      assert(error instanceof BadRequestException);
+      const response = error.getResponse() as {
+        skipped: number;
+        errors: Array<{ message: string }>;
+      };
+      assert.equal(response.skipped, 1);
+      assert(
+        response.errors.some((item) =>
+          item.message.includes("Multiple departments matched this value."),
+        ),
+      );
+      return true;
+    },
+  );
 
   mock = prisma({
     studentProfile: {

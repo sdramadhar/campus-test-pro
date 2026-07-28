@@ -60,6 +60,27 @@ export const studentImportColumns = [
   "status",
 ] as const;
 
+export const studentImportTemplateColumns = [
+  "rollNumber",
+  "studentId",
+  "name",
+  "email",
+  "phone",
+  "gender",
+  "dob",
+  "address",
+  "department",
+  "course",
+  "semester",
+  "batch",
+  "section",
+  "guardianName",
+  "guardianPhone",
+  "admissionYear",
+  "temporaryPassword",
+  "status",
+] as const;
+
 const requiredColumns = new Set([
   "rollNumber",
   "studentId",
@@ -76,6 +97,13 @@ const requiredColumns = new Set([
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type StudentImportColumn = (typeof studentImportColumns)[number];
+
+const headerAliases: Record<string, StudentImportColumn> = {
+  department: "departmentId",
+  course: "courseId",
+  semester: "semesterId",
+  batch: "batchId",
+};
 
 export function parseStudentImportCsv(csv: string): StudentImportParseResult {
   return parseStudentImportTable(parseCsv(csv));
@@ -197,6 +225,10 @@ function parseCsv(csv: string): string[][] {
 
 function normalizeHeader(value: unknown): string {
   const header = stringCell(value).trim();
+  const alias = headerAliases[header.toLowerCase()];
+  if (alias) {
+    return alias;
+  }
   return studentImportColumns.find(
     (column) => column.toLowerCase() === header.toLowerCase(),
   ) ?? header;

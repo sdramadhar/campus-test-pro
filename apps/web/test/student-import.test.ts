@@ -37,6 +37,7 @@ async function main(): Promise<void> {
   await loadingStateResetsAfterError();
   filePickerIsConfigured();
   csvParsing();
+  friendlyHeaderParsing();
   xlsxParsing();
   dobFormatParsing();
   excelDateCellParsing();
@@ -84,6 +85,57 @@ function csvParsing(): void {
   const result = parseStudentImportCsv(csv);
   assert.equal(result.errors.length, 0);
   assert.equal(result.payload.students[0]?.email, validRow.email);
+}
+
+function friendlyHeaderParsing(): void {
+  const headers = [
+    "rollNumber",
+    "studentId",
+    "name",
+    "email",
+    "phone",
+    "gender",
+    "dob",
+    "address",
+    "department",
+    "course",
+    "semester",
+    "batch",
+    "section",
+    "guardianName",
+    "guardianPhone",
+    "admissionYear",
+    "temporaryPassword",
+    "status",
+  ];
+  const values = [
+    validRow.rollNumber,
+    validRow.studentId,
+    validRow.name,
+    validRow.email,
+    validRow.phone,
+    validRow.gender,
+    validRow.dob,
+    validRow.address,
+    "Computer Science",
+    "B.Tech CSE",
+    "Semester 2",
+    "2026 BE A",
+    validRow.section,
+    validRow.guardianName,
+    validRow.guardianPhone,
+    validRow.admissionYear,
+    validRow.temporaryPassword,
+    validRow.status,
+  ];
+  const result = parseStudentImportCsv([headers.join(","), values.join(",")].join("\n"));
+  assert.equal(result.errors.length, 0);
+  const [student] = result.payload.students;
+  assert(student);
+  assert.equal(student.departmentId, "Computer Science");
+  assert.equal(student.courseId, "B.Tech CSE");
+  assert.equal(student.semesterId, "Semester 2");
+  assert.equal(student.batchId, "2026 BE A");
 }
 
 function xlsxParsing(): void {

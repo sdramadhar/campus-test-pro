@@ -9,6 +9,7 @@ import {
   Search,
   Upload,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -32,9 +33,16 @@ import {
   parseStudentImportWorkbook,
   runStudentImportTask,
   StudentImportParseResult,
+  studentImportTemplateColumns,
 } from "../lib/student-import";
 
 type LookupMap = Partial<Record<EntityKey, EntityRecord[]>>;
+interface ImportPreview {
+  validRows: number;
+  duplicateRows: number;
+  invalidRows: number;
+  errors: string[];
+}
 
 const statusOptions = ["ACTIVE", "INACTIVE"];
 const genderOptions = ["NOT_SPECIFIED", "MALE", "FEMALE", "OTHER"];
@@ -54,6 +62,7 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
   const [message, setMessage] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [bulkState, setBulkState] = useState<"idle" | "json" | "file">("idle");
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const schema = useMemo(() => schemaFor(config), [config]);
@@ -201,6 +210,12 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
       method: "POST",
       body: JSON.stringify(payload),
     });
+    setImportPreview({
+      validRows: result.imported,
+      duplicateRows: duplicateCount(result.errors),
+      invalidRows: result.skipped ?? 0,
+      errors: importErrorMessages(result.errors),
+    });
     setMessage(importSuccessMessage(result));
     await load();
   }
@@ -210,6 +225,7 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
       return;
     }
     setMessage("");
+    setImportPreview(null);
     await runStudentImportTask("json", setBulkState, async () => {
       try {
         const parsed = JSON.parse(bulkText) as unknown;
@@ -232,9 +248,25 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
       return;
     }
     setMessage("");
+    setImportPreview(null);
     await runStudentImportTask("file", setBulkState, async () => {
       try {
         const parsed = await parseStudentImportFile(file);
+        const invalidRows = new Set(parsed.errors.map((error) => error.row));
+        setImportPreview({
+          validRows: parsed.payload.students.length,
+          duplicateRows: 0,
+          invalidRows: invalidRows.size,
+          errors: parsed.errors.map((error) =>
+            [
+              error.row ? `Row ${String(error.row)}` : "",
+              error.field,
+              error.message,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          ),
+        });
         if (parsed.errors.length > 0) {
           setMessage(formatImportValidation(parsed));
           return;
@@ -249,6 +281,44 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  }
+
+  function downloadStudentExcelTemplate(): void {
+    const workbook = XLSX.utils.book_new();
+    const templateRows = [
+      [...studentImportTemplateColumns],
+      [
+        "1RM25CD035",
+        "188",
+        "RAMA",
+        "student@example.com",
+        "9202998627",
+        "MALE",
+        "2006-12-10",
+        "Student address",
+        "Computer Science",
+        "B.Tech CSE",
+        "Semester 2",
+        "2026 BE A",
+        "A",
+        "Guardian name",
+        "9610176260",
+        2024,
+        "1RM25CD035",
+        "ACTIVE",
+      ],
+    ];
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet(templateRows),
+      "Students",
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(referenceRows(lookups)),
+      "Reference Data",
+    );
+    XLSX.writeFile(workbook, "student-import-template.xlsx");
   }
 
   return (
@@ -374,6 +444,19 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
               )}
             </div>
           </div>
+          {importPreview && (
+            <div className="form-alert">
+              <AlertCircle aria-hidden="true" size={18} />
+              <span>
+                Preview: {String(importPreview.validRows)} valid,{" "}
+                {String(importPreview.duplicateRows)} duplicate,{" "}
+                {String(importPreview.invalidRows)} invalid.
+                {importPreview.errors.length > 0
+                  ? ` ${importPreview.errors.join(" ")}`
+                  : ""}
+              </span>
+            </div>
+          )}
         </section>
       )}
 
@@ -434,16 +517,7 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
             </button>
             <button
               onClick={() => {
-                void download(
-                  "/api/v1/students/template",
-                  "student-import-template.json",
-                ).catch((error: unknown) => {
-                  setMessage(
-                    error instanceof Error
-                      ? error.message
-                      : "Template download failed.",
-                  );
-                });
+                downloadStudentExcelTemplate();
               }}
               type="button"
             >
@@ -568,6 +642,35 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
   );
 }
 
+function referenceRows(lookups: LookupMap): Array<Record<string, string>> {
+  return [
+    ...(lookups.departments ?? []).map((item) => ({
+      type: "Department",
+      name: readValue(item, "departmentName"),
+      code: readValue(item, "departmentCode"),
+      id: readValue(item, "id"),
+    })),
+    ...(lookups.courses ?? []).map((item) => ({
+      type: "Course",
+      name: readValue(item, "courseName"),
+      code: readValue(item, "shortName"),
+      id: readValue(item, "id"),
+    })),
+    ...(lookups.semesters ?? []).map((item) => ({
+      type: "Semester",
+      name: readValue(item, "semesterName"),
+      code: readValue(item, "semesterNumber"),
+      id: readValue(item, "id"),
+    })),
+    ...(lookups.batches ?? []).map((item) => ({
+      type: "Batch",
+      name: readValue(item, "batchName"),
+      code: readValue(item, "section"),
+      id: readValue(item, "id"),
+    })),
+  ];
+}
+
 async function parseStudentImportFile(
   file: File,
 ): Promise<StudentImportParseResult> {
@@ -602,16 +705,10 @@ function importSuccessMessage(result: {
   skipped?: number;
   errors?: Array<{ field?: string; message?: string; row?: number }>;
 }): string {
-  const duplicateCount =
-    result.errors?.filter((error) =>
-      `${error.field ?? ""} ${error.message ?? ""}`
-        .toLowerCase()
-        .includes("duplicate"),
-    ).length ?? 0;
   const parts = [
     `Imported ${String(result.imported)} student(s).`,
     `Skipped ${String(result.skipped ?? 0)}.`,
-    `Duplicates ${String(duplicateCount)}.`,
+    `Duplicates ${String(duplicateCount(result.errors))}.`,
   ];
   if (result.errors?.length) {
     parts.push(
@@ -629,6 +726,37 @@ function importSuccessMessage(result: {
     );
   }
   return parts.join(" ");
+}
+
+function duplicateCount(
+  errors?: Array<{ field?: string; message?: string; row?: number }>,
+): number {
+  const rows = new Set(
+    errors
+      ?.filter((error) =>
+        `${error.field ?? ""} ${error.message ?? ""}`
+          .toLowerCase()
+          .match(/duplicate|already exists/),
+      )
+      .map((error) => error.row ?? 0),
+  );
+  return rows.size;
+}
+
+function importErrorMessages(
+  errors?: Array<{ field?: string; message?: string; row?: number }>,
+): string[] {
+  return (
+    errors?.map((error) =>
+      [
+        error.row ? `Row ${String(error.row)}` : "",
+        error.field,
+        error.message,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    ) ?? []
+  );
 }
 
 function initialForm(config: EntityConfig): Record<string, string> {

@@ -58,6 +58,35 @@ interface NormalizedStudentImport {
   status: EntityStatus;
 }
 
+interface AcademicImportLookups {
+  departments: Array<{
+    id: string;
+    departmentName: string;
+    departmentCode: string;
+  }>;
+  courses: Array<{
+    id: string;
+    courseName: string | null;
+    shortName: string | null;
+    code: string;
+    title: string;
+  }>;
+  semesters: Array<{
+    id: string;
+    semesterName: string;
+    semesterNumber: number;
+    courseId: string;
+  }>;
+  batches: Array<{
+    id: string;
+    batchName: string;
+    academicYear: number;
+    section: string;
+    courseId: string;
+    semesterId: string;
+  }>;
+}
+
 type PublicUserSelect = {
   id: true;
   email: true;
@@ -1010,21 +1039,21 @@ export class AcademicService {
         errors.push({
           row: student.row,
           field: "email",
-          message: "Email already exists.",
+          message: "This student already exists and was skipped.",
         });
       }
       if (existingStudentIds.has(student.studentId)) {
         errors.push({
           row: student.row,
           field: "studentId",
-          message: "Student ID already exists.",
+          message: "This student already exists and was skipped.",
         });
       }
       if (existingRollNumbers.has(student.rollNumber)) {
         errors.push({
           row: student.row,
           field: "rollNumber",
-          message: "Roll number already exists.",
+          message: "This student already exists and was skipped.",
         });
       }
     }
@@ -1035,31 +1064,98 @@ export class AcademicService {
     students: NormalizedStudentImport[],
     errors: BulkStudentError[],
   ): Promise<void> {
-    const departmentIds = [...new Set(students.map((item) => item.departmentId))];
-    const courseIds = [...new Set(students.map((item) => item.courseId))];
-    const semesterIds = [...new Set(students.map((item) => item.semesterId))];
-    const batchIds = [...new Set(students.map((item) => item.batchId))];
     const [departments, courses, semesters, batches] =
       await this.prisma.$transaction([
         this.prisma.department.findMany({
-          where: { collegeId, id: { in: departmentIds } },
-          select: { id: true },
+          where: { collegeId },
+          select: { id: true, departmentName: true, departmentCode: true },
         }),
         this.prisma.course.findMany({
-          where: { collegeId, id: { in: courseIds } },
-          select: { id: true },
+          where: { collegeId },
+          select: {
+            id: true,
+            courseName: true,
+            shortName: true,
+            code: true,
+            title: true,
+          },
         }),
         this.prisma.semester.findMany({
-          where: { collegeId, id: { in: semesterIds } },
-          select: { id: true, courseId: true },
+          where: { collegeId },
+          select: {
+            id: true,
+            semesterName: true,
+            semesterNumber: true,
+            courseId: true,
+          },
         }),
         this.prisma.batch.findMany({
-          where: { collegeId, id: { in: batchIds } },
-          select: { id: true, courseId: true, semesterId: true },
+          where: { collegeId },
+          select: {
+            id: true,
+            batchName: true,
+            academicYear: true,
+            section: true,
+            courseId: true,
+            semesterId: true,
+          },
         }),
       ]);
-    const validDepartments = new Set(departments.map((item) => item.id));
-    const validCourses = new Set(courses.map((item) => item.id));
+    const lookups: AcademicImportLookups = {
+      departments,
+      courses,
+      semesters,
+      batches,
+    };
+
+    for (const student of students) {
+      this.resolveAcademicImportValue(
+        student,
+        "departmentId",
+        "department",
+        student.departmentId,
+        lookups.departments,
+        (item) => [item.id, item.departmentName, item.departmentCode],
+        errors,
+      );
+      this.resolveAcademicImportValue(
+        student,
+        "courseId",
+        "course",
+        student.courseId,
+        lookups.courses,
+        (item) => [item.id, item.courseName, item.shortName, item.code, item.title],
+        errors,
+      );
+      this.resolveAcademicImportValue(
+        student,
+        "semesterId",
+        "semester",
+        student.semesterId,
+        lookups.semesters,
+        (item) => [
+          item.id,
+          item.semesterName,
+          `Semester ${String(item.semesterNumber)}`,
+          String(item.semesterNumber),
+        ],
+        errors,
+      );
+      this.resolveAcademicImportValue(
+        student,
+        "batchId",
+        "batch",
+        student.batchId,
+        lookups.batches,
+        (item) => [
+          item.id,
+          item.batchName,
+          `${String(item.academicYear)} ${item.section}`,
+        ],
+        errors,
+      );
+    }
+
     const validSemesters = new Map(
       semesters.map((item) => [item.id, item.courseId]),
     );
@@ -1071,26 +1167,23 @@ export class AcademicService {
     );
 
     for (const student of students) {
-      if (!validDepartments.has(student.departmentId)) {
-        errors.push({
-          row: student.row,
-          field: "departmentId",
-          message: "Invalid department ID.",
-        });
-      }
-      if (!validCourses.has(student.courseId)) {
-        errors.push({
-          row: student.row,
-          field: "courseId",
-          message: "Invalid course ID.",
-        });
+      if (
+        errors.some(
+          (error) =>
+            error.row === student.row &&
+            ["departmentId", "courseId", "semesterId", "batchId"].includes(
+              error.field,
+            ),
+        )
+      ) {
+        continue;
       }
       const semesterCourseId = validSemesters.get(student.semesterId);
       if (!semesterCourseId) {
         errors.push({
           row: student.row,
           field: "semesterId",
-          message: "Invalid semester ID.",
+          message: `Semester "${student.semesterId}" was not found.`,
         });
       } else if (semesterCourseId !== student.courseId) {
         errors.push({
@@ -1104,7 +1197,7 @@ export class AcademicService {
         errors.push({
           row: student.row,
           field: "batchId",
-          message: "Invalid batch ID.",
+          message: `Batch "${student.batchId}" was not found.`,
         });
       } else if (
         batch.courseId !== student.courseId ||
@@ -1119,6 +1212,53 @@ export class AcademicService {
     }
   }
 
+  private resolveAcademicImportValue<T extends { id: string }>(
+    student: NormalizedStudentImport,
+    field: "departmentId" | "courseId" | "semesterId" | "batchId",
+    label: "department" | "course" | "semester" | "batch",
+    value: string,
+    items: T[],
+    aliases: (item: T) => Array<string | number | null | undefined>,
+    errors: BulkStudentError[],
+  ): void {
+    const normalized = this.normalizedImportValue(value);
+    if (!normalized) return;
+    const matches = items.filter((item) =>
+      aliases(item).some(
+        (alias) => this.normalizedImportValue(alias) === normalized,
+      ),
+    );
+    const uniqueIds = [...new Set(matches.map((item) => item.id))];
+    if (uniqueIds.length === 1) {
+      student[field] = uniqueIds[0] ?? value;
+      return;
+    }
+    const display = this.importLabel(label);
+    errors.push({
+      row: student.row,
+      field,
+      message:
+        uniqueIds.length === 0
+          ? `${display} "${value}" was not found.`
+          : `Multiple ${this.importPlural(label)} matched this value.`,
+    });
+  }
+
+  private normalizedImportValue(value: string | number | null | undefined) {
+    return String(value ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+  }
+
+  private importLabel(label: string) {
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  private importPlural(label: string) {
+    return `${label}s`;
+  }
+
   private throwBulkImportError(errors: BulkStudentError[]): never {
     const duplicate = errors.some((error) =>
       ["email", "studentId", "rollNumber"].includes(error.field) &&
@@ -1127,7 +1267,7 @@ export class AcademicService {
     const payload = {
       success: false,
       imported: 0,
-      skipped: errors.length,
+      skipped: new Set(errors.map((error) => error.row)).size,
       errors,
     };
     if (duplicate) {
