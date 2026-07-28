@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
+  IsArray,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -11,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from "class-validator";
 import { EntityStatus, Gender } from "../../../../generated/phase5-client";
 
@@ -379,5 +381,8 @@ export class UpdateEntityStatusDto {
 
 export class BulkStudentsDto {
   @ApiProperty({ type: [StudentDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentDto)
   students!: StudentDto[];
 }

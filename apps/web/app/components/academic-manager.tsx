@@ -47,6 +47,7 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
   );
   const [message, setMessage] = useState("");
   const [bulkText, setBulkText] = useState("");
+  const [bulkState, setBulkState] = useState<"idle" | "importing">("idle");
 
   const schema = useMemo(() => schemaFor(config), [config]);
 
@@ -184,13 +185,34 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
   }
 
   async function bulkCreate(): Promise<void> {
-    const parsed = JSON.parse(bulkText) as unknown;
-    await academicRequest<{ success: true }>("/api/v1/students/bulk", {
-      method: "POST",
-      body: JSON.stringify(parsed),
-    });
-    setBulkText("");
-    await load();
+    if (bulkState === "importing") {
+      return;
+    }
+    setBulkState("importing");
+    setMessage("");
+    try {
+      const parsed = JSON.parse(bulkText) as unknown;
+      const result = await academicRequest<{
+        imported: number;
+        success: true;
+      }>("/api/v1/students/bulk", {
+        method: "POST",
+        body: JSON.stringify(parsed),
+      });
+      setBulkText("");
+      setMessage(`Imported ${String(result.imported)} student(s).`);
+      await load();
+    } catch (error) {
+      setMessage(
+        error instanceof SyntaxError
+          ? "Student import failed. Check that the payload is valid JSON."
+          : error instanceof Error
+            ? error.message
+            : "Student import failed.",
+      );
+    } finally {
+      setBulkState("idle");
+    }
   }
 
   return (
@@ -335,17 +357,18 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
           />
           <div className="form-actions">
             <button
+              disabled={bulkState === "importing"}
               onClick={() => {
-                void bulkCreate().catch((error: unknown) => {
-                  setMessage(
-                    error instanceof Error ? error.message : "Student import failed.",
-                  );
-                });
+                void bulkCreate();
               }}
               type="button"
             >
-              <Upload size={18} />
-              Import
+              {bulkState === "importing" ? (
+                <Loader2 className="spin" size={18} />
+              ) : (
+                <Upload size={18} />
+              )}
+              {bulkState === "importing" ? "Importing..." : "Import"}
             </button>
             <button
               onClick={() => {

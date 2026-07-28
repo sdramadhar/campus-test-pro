@@ -30,6 +30,34 @@ import {
 } from "./dto/academic.dto";
 
 type TenantUser = AuthenticatedUser;
+interface BulkStudentError {
+  row: number;
+  field: string;
+  message: string;
+}
+
+interface NormalizedStudentImport {
+  row: number;
+  rollNumber: string;
+  studentId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  gender: Gender;
+  dob: Date | null;
+  address: string | null;
+  departmentId: string;
+  courseId: string;
+  semesterId: string;
+  batchId: string;
+  section: string;
+  guardianName: string | null;
+  guardianPhone: string | null;
+  admissionYear: number;
+  temporaryPassword: string;
+  status: EntityStatus;
+}
+
 type PublicUserSelect = {
   id: true;
   email: true;
@@ -596,51 +624,56 @@ export class AcademicService {
     const collegeId = this.scopeCollege(user, dto.collegeId, true);
     await this.ensureStudentLinks(collegeId, dto);
     await this.ensureUserEmail(dto.email);
-    const student = await this.prisma.$transaction(async (tx) => {
-      const profileUser = await tx.user.create({
-        data: {
-          email: dto.email.trim().toLowerCase(),
-          studentId: dto.studentId.trim().toUpperCase(),
-          name: dto.name.trim(),
-          phone: this.optional(dto.phone),
-          role: Role.STUDENT,
-          passwordHash: await argon2.hash(
-            dto.temporaryPassword ?? "Student@12345",
-          ),
-          collegeId,
-          isActive: (dto.status ?? EntityStatus.ACTIVE) === EntityStatus.ACTIVE,
-          mustChangePassword: true,
-        },
-      });
+    try {
+      const student = await this.prisma.$transaction(async (tx) => {
+        const profileUser = await tx.user.create({
+          data: {
+            email: dto.email.trim().toLowerCase(),
+            studentId: dto.studentId.trim().toUpperCase(),
+            name: dto.name.trim(),
+            phone: this.optional(dto.phone),
+            role: Role.STUDENT,
+            passwordHash: await argon2.hash(
+              dto.temporaryPassword ?? "Student@12345",
+            ),
+            collegeId,
+            isActive:
+              (dto.status ?? EntityStatus.ACTIVE) === EntityStatus.ACTIVE,
+            mustChangePassword: true,
+          },
+        });
 
-      return tx.studentProfile.create({
-        data: {
-          collegeId,
-          rollNumber: dto.rollNumber.trim().toUpperCase(),
-          departmentId: dto.departmentId,
-          courseId: dto.courseId,
-          semesterId: dto.semesterId,
-          batchId: dto.batchId,
-          section: dto.section.trim().toUpperCase(),
-          gender: dto.gender ?? Gender.NOT_SPECIFIED,
-          dob: dto.dob ? new Date(dto.dob) : null,
-          address: this.optional(dto.address),
-          guardianName: this.optional(dto.guardianName),
-          guardianPhone: this.optional(dto.guardianPhone),
-          admissionYear: dto.admissionYear,
-          status: dto.status ?? EntityStatus.ACTIVE,
-          userId: profileUser.id,
-        },
-        include: {
-          user: { select: publicUserSelect },
-          department: true,
-          course: true,
-          semester: true,
-          batch: true,
-        },
+        return tx.studentProfile.create({
+          data: {
+            collegeId,
+            rollNumber: dto.rollNumber.trim().toUpperCase(),
+            departmentId: dto.departmentId,
+            courseId: dto.courseId,
+            semesterId: dto.semesterId,
+            batchId: dto.batchId,
+            section: dto.section.trim().toUpperCase(),
+            gender: dto.gender ?? Gender.NOT_SPECIFIED,
+            dob: dto.dob ? new Date(dto.dob) : null,
+            address: this.optional(dto.address),
+            guardianName: this.optional(dto.guardianName),
+            guardianPhone: this.optional(dto.guardianPhone),
+            admissionYear: dto.admissionYear,
+            status: dto.status ?? EntityStatus.ACTIVE,
+            userId: profileUser.id,
+          },
+          include: {
+            user: { select: publicUserSelect },
+            department: true,
+            course: true,
+            semester: true,
+            batch: true,
+          },
+        });
       });
-    });
-    return { success: true, data: student };
+      return { success: true, data: student };
+    } catch (error) {
+      this.throwConflict(error, "Student email, ID, or roll number exists.");
+    }
   }
 
   async updateStudent(user: TenantUser, id: string, dto: Partial<StudentDto>) {
@@ -703,11 +736,79 @@ export class AcademicService {
   }
 
   async bulkCreateStudents(user: TenantUser, dto: BulkStudentsDto) {
-    const created = [];
-    for (const student of dto.students) {
-      created.push((await this.createStudent(user, student)).data);
+    const collegeId = this.scopeCollege(
+      user,
+      Array.isArray(dto.students) ? dto.students[0]?.collegeId : undefined,
+      true,
+    );
+    const { students, errors } = await this.validateBulkStudents(
+      collegeId,
+      dto,
+    );
+    if (errors.length > 0) {
+      this.throwBulkImportError(errors);
     }
-    return { success: true, data: created };
+
+    const created = await this.prisma
+      .$transaction(async (tx) => {
+        const rows = [];
+        for (const student of students) {
+          const profileUser = await tx.user.create({
+            data: {
+              email: student.email,
+              studentId: student.studentId,
+              name: student.name,
+              phone: student.phone,
+              role: Role.STUDENT,
+              passwordHash: await argon2.hash(student.temporaryPassword),
+              collegeId,
+              isActive: student.status === EntityStatus.ACTIVE,
+              mustChangePassword: true,
+            },
+          });
+
+          rows.push(
+            await tx.studentProfile.create({
+              data: {
+                collegeId,
+                rollNumber: student.rollNumber,
+                departmentId: student.departmentId,
+                courseId: student.courseId,
+                semesterId: student.semesterId,
+                batchId: student.batchId,
+                section: student.section,
+                gender: student.gender,
+                dob: student.dob,
+                address: student.address,
+                guardianName: student.guardianName,
+                guardianPhone: student.guardianPhone,
+                admissionYear: student.admissionYear,
+                status: student.status,
+                userId: profileUser.id,
+              },
+              include: {
+                user: { select: publicUserSelect },
+                department: true,
+                course: true,
+                semester: true,
+                batch: true,
+              },
+            }),
+          );
+        }
+        return rows;
+      })
+      .catch((error: unknown) =>
+        this.throwConflict(error, "Student email, ID, or roll number exists."),
+      );
+
+    return {
+      success: true,
+      imported: created.length,
+      skipped: 0,
+      errors: [],
+      data: created,
+    };
   }
 
   async bulkUpdateStudents(user: TenantUser, dto: BulkStudentsDto) {
@@ -728,11 +829,351 @@ export class AcademicService {
     return { success: true, data: updated };
   }
 
+  private async validateBulkStudents(
+    collegeId: string,
+    dto: BulkStudentsDto,
+  ): Promise<{
+    students: NormalizedStudentImport[];
+    errors: BulkStudentError[];
+  }> {
+    const errors: BulkStudentError[] = [];
+    if (!Array.isArray(dto.students) || dto.students.length === 0) {
+      return {
+        students: [],
+        errors: [
+          {
+            row: 0,
+            field: "students",
+            message: "students must contain at least one student.",
+          },
+        ],
+      };
+    }
+
+    const students = dto.students.map((student, index) =>
+      this.normalizeBulkStudent(student, index + 1, errors),
+    );
+    dto.students.forEach((student, index) => {
+      if (student.collegeId && student.collegeId !== collegeId) {
+        errors.push({
+          row: index + 1,
+          field: "collegeId",
+          message: "All imported students must belong to the same college.",
+        });
+      }
+    });
+    this.addPayloadDuplicateErrors(students, errors);
+    if (errors.length > 0) {
+      return { students, errors };
+    }
+
+    await this.addExistingDuplicateErrors(collegeId, students, errors);
+    await this.addStudentLinkErrors(collegeId, students, errors);
+    return { students, errors };
+  }
+
+  private normalizeBulkStudent(
+    student: StudentDto,
+    row: number,
+    errors: BulkStudentError[],
+  ): NormalizedStudentImport {
+    const raw = student as Partial<Record<keyof StudentDto, unknown>>;
+    const required = [
+      "rollNumber",
+      "studentId",
+      "name",
+      "email",
+      "departmentId",
+      "courseId",
+      "semesterId",
+      "batchId",
+      "section",
+      "admissionYear",
+    ] as const;
+    for (const field of required) {
+      const value = raw[field];
+      if (value === undefined || value === null || this.stringValue(value) === "") {
+        errors.push({ row, field, message: `${field} is required.` });
+      }
+    }
+
+    const email = this.stringValue(raw.email).toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push({ row, field: "email", message: "Invalid email address." });
+    }
+    const admissionYear = Number(raw.admissionYear);
+    if (
+      !Number.isInteger(admissionYear) ||
+      admissionYear < 2000 ||
+      admissionYear > 2100
+    ) {
+      errors.push({
+        row,
+        field: "admissionYear",
+        message: "admissionYear must be between 2000 and 2100.",
+      });
+    }
+    const gender = student.gender ?? Gender.NOT_SPECIFIED;
+    if (!Object.values(Gender).includes(gender)) {
+      errors.push({ row, field: "gender", message: "Invalid gender." });
+    }
+    const status = student.status ?? EntityStatus.ACTIVE;
+    if (!Object.values(EntityStatus).includes(status)) {
+      errors.push({ row, field: "status", message: "Invalid status." });
+    }
+    const dobRaw = this.stringValue(raw.dob);
+    const dob = dobRaw ? new Date(dobRaw) : null;
+    if (dobRaw && Number.isNaN(dob?.getTime())) {
+      errors.push({ row, field: "dob", message: "Invalid date of birth." });
+    }
+
+    return {
+      row,
+      rollNumber: this.stringValue(raw.rollNumber).toUpperCase(),
+      studentId: this.stringValue(raw.studentId).toUpperCase(),
+      name: this.stringValue(raw.name),
+      email,
+      phone: this.optional(student.phone),
+      gender,
+      dob,
+      address: this.optional(student.address),
+      departmentId: this.stringValue(raw.departmentId),
+      courseId: this.stringValue(raw.courseId),
+      semesterId: this.stringValue(raw.semesterId),
+      batchId: this.stringValue(raw.batchId),
+      section: this.stringValue(raw.section).toUpperCase(),
+      guardianName: this.optional(student.guardianName),
+      guardianPhone: this.optional(student.guardianPhone),
+      admissionYear,
+      temporaryPassword:
+        student.temporaryPassword?.trim() ||
+        this.stringValue(raw.rollNumber) ||
+        "Student@12345",
+      status,
+    };
+  }
+
+  private addPayloadDuplicateErrors(
+    students: NormalizedStudentImport[],
+    errors: BulkStudentError[],
+  ): void {
+    for (const field of ["email", "studentId", "rollNumber"] as const) {
+      const seen = new Map<string, number>();
+      for (const student of students) {
+        const value = student[field];
+        if (!value) continue;
+        const firstRow = seen.get(value);
+        if (firstRow) {
+          errors.push({
+            row: student.row,
+            field,
+            message: `Duplicate ${field} in import payload; first seen on row ${String(firstRow)}.`,
+          });
+        } else {
+          seen.set(value, student.row);
+        }
+      }
+    }
+  }
+
+  private async addExistingDuplicateErrors(
+    collegeId: string,
+    students: NormalizedStudentImport[],
+    errors: BulkStudentError[],
+  ): Promise<void> {
+    const emails = students.map((student) => student.email).filter(Boolean);
+    const studentIds = students
+      .map((student) => student.studentId)
+      .filter(Boolean);
+    const rollNumbers = students
+      .map((student) => student.rollNumber)
+      .filter(Boolean);
+    const [users, profiles] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where: { OR: [{ email: { in: emails } }, { studentId: { in: studentIds } }] },
+        select: { email: true, studentId: true },
+      }),
+      this.prisma.studentProfile.findMany({
+        where: { collegeId, rollNumber: { in: rollNumbers } },
+        select: { rollNumber: true },
+      }),
+    ]);
+    const existingEmails = new Set(users.map((item) => item.email));
+    const existingStudentIds = new Set(
+      users.map((item) => item.studentId).filter(Boolean),
+    );
+    const existingRollNumbers = new Set(
+      profiles.map((item) => item.rollNumber),
+    );
+    for (const student of students) {
+      if (existingEmails.has(student.email)) {
+        errors.push({
+          row: student.row,
+          field: "email",
+          message: "Email already exists.",
+        });
+      }
+      if (existingStudentIds.has(student.studentId)) {
+        errors.push({
+          row: student.row,
+          field: "studentId",
+          message: "Student ID already exists.",
+        });
+      }
+      if (existingRollNumbers.has(student.rollNumber)) {
+        errors.push({
+          row: student.row,
+          field: "rollNumber",
+          message: "Roll number already exists.",
+        });
+      }
+    }
+  }
+
+  private async addStudentLinkErrors(
+    collegeId: string,
+    students: NormalizedStudentImport[],
+    errors: BulkStudentError[],
+  ): Promise<void> {
+    const departmentIds = [...new Set(students.map((item) => item.departmentId))];
+    const courseIds = [...new Set(students.map((item) => item.courseId))];
+    const semesterIds = [...new Set(students.map((item) => item.semesterId))];
+    const batchIds = [...new Set(students.map((item) => item.batchId))];
+    const [departments, courses, semesters, batches] =
+      await this.prisma.$transaction([
+        this.prisma.department.findMany({
+          where: { collegeId, id: { in: departmentIds } },
+          select: { id: true },
+        }),
+        this.prisma.course.findMany({
+          where: { collegeId, id: { in: courseIds } },
+          select: { id: true },
+        }),
+        this.prisma.semester.findMany({
+          where: { collegeId, id: { in: semesterIds } },
+          select: { id: true, courseId: true },
+        }),
+        this.prisma.batch.findMany({
+          where: { collegeId, id: { in: batchIds } },
+          select: { id: true, courseId: true, semesterId: true },
+        }),
+      ]);
+    const validDepartments = new Set(departments.map((item) => item.id));
+    const validCourses = new Set(courses.map((item) => item.id));
+    const validSemesters = new Map(
+      semesters.map((item) => [item.id, item.courseId]),
+    );
+    const validBatches = new Map(
+      batches.map((item) => [
+        item.id,
+        { courseId: item.courseId, semesterId: item.semesterId },
+      ]),
+    );
+
+    for (const student of students) {
+      if (!validDepartments.has(student.departmentId)) {
+        errors.push({
+          row: student.row,
+          field: "departmentId",
+          message: "Invalid department ID.",
+        });
+      }
+      if (!validCourses.has(student.courseId)) {
+        errors.push({
+          row: student.row,
+          field: "courseId",
+          message: "Invalid course ID.",
+        });
+      }
+      const semesterCourseId = validSemesters.get(student.semesterId);
+      if (!semesterCourseId) {
+        errors.push({
+          row: student.row,
+          field: "semesterId",
+          message: "Invalid semester ID.",
+        });
+      } else if (semesterCourseId !== student.courseId) {
+        errors.push({
+          row: student.row,
+          field: "semesterId",
+          message: "Semester does not belong to the selected course.",
+        });
+      }
+      const batch = validBatches.get(student.batchId);
+      if (!batch) {
+        errors.push({
+          row: student.row,
+          field: "batchId",
+          message: "Invalid batch ID.",
+        });
+      } else if (
+        batch.courseId !== student.courseId ||
+        batch.semesterId !== student.semesterId
+      ) {
+        errors.push({
+          row: student.row,
+          field: "batchId",
+          message: "Batch does not belong to the selected course and semester.",
+        });
+      }
+    }
+  }
+
+  private throwBulkImportError(errors: BulkStudentError[]): never {
+    const duplicate = errors.some((error) =>
+      ["email", "studentId", "rollNumber"].includes(error.field) &&
+      /already exists|duplicate/i.test(error.message),
+    );
+    const payload = {
+      success: false,
+      imported: 0,
+      skipped: errors.length,
+      errors,
+    };
+    if (duplicate) {
+      throw new ConflictException(payload);
+    }
+    throw new BadRequestException(payload);
+  }
+
   studentTemplate() {
     return {
       success: true,
-      data: [
-        "rollNumber,studentId,name,email,phone,gender,dob,address,departmentId,courseId,semesterId,batchId,section,guardianName,guardianPhone,admissionYear",
+      data: {
+        students: [
+          {
+            rollNumber: "1RM25CD035",
+            studentId: "188",
+            name: "RAMA",
+            email: "student@example.com",
+            phone: "9202998627",
+            gender: "MALE",
+            dob: "2006-12-10",
+            address: "Student address",
+            departmentId: "<valid department id>",
+            courseId: "<valid course id>",
+            semesterId: "<valid semester id>",
+            batchId: "<valid batch id>",
+            section: "A",
+            guardianName: "Guardian name",
+            guardianPhone: "9610176260",
+            admissionYear: 2024,
+            temporaryPassword: "1RM25CD035",
+            status: "ACTIVE",
+          },
+        ],
+      },
+      requiredFields: [
+        "rollNumber",
+        "studentId",
+        "name",
+        "email",
+        "departmentId",
+        "courseId",
+        "semesterId",
+        "batchId",
+        "section",
+        "admissionYear",
       ],
     };
   }
@@ -1041,5 +1482,11 @@ export class AcademicService {
   private optional(value: string | undefined): string | null {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
+  }
+
+  private stringValue(value: unknown): string {
+    return typeof value === "string" || typeof value === "number"
+      ? String(value).trim()
+      : "";
   }
 }

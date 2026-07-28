@@ -59,6 +59,19 @@ export async function responseErrorMessage(response: Response): Promise<string> 
         .filter((item): item is string => typeof item === "string")
         .join(", ");
     }
+    if (Array.isArray((body as { errors?: unknown }).errors)) {
+      return (body as { errors: Array<{ row?: number; field?: string; message?: string }> })
+        .errors.map((error) =>
+          [
+            error.row ? `Row ${String(error.row)}` : "",
+            error.field ?? "",
+            error.message ?? "Invalid value.",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        )
+        .join("; ");
+    }
   }
   const text = await response.text().catch(() => "");
   return text || `Request failed with ${String(response.status)}`;

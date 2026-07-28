@@ -27,9 +27,13 @@ async function main(): Promise<void> {
     "../app/lib/api-client"
   );
 
-  let calls = installFetch([jsonResponse({ ok: true })]);
-  await authenticatedFetch("/api/v1/students/template");
+  let calls = installFetch([jsonResponse({ ok: true }), jsonResponse({ ok: true })]);
+  await Promise.all([
+    authenticatedFetch("/api/v1/students/template"),
+    authenticatedFetch("/api/v1/students/template"),
+  ]);
   assert.equal(calls[0]?.credentials, "include");
+  assert.equal(calls[1]?.credentials, "include");
 
   calls = installFetch([jsonResponse({ ok: true })]);
   await authenticatedFetch("/api/v1/students/export");
