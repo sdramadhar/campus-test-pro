@@ -1,23 +1,11 @@
-import { apiUrl } from "./auth";
+import { apiJson } from "./api-client";
 
 export async function saasRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    credentials: "include",
-    headers,
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      message?: unknown;
-    } | null;
-    throw new Error(typeof body?.message === "string" ? body.message : "Request failed");
-  }
-  return (await response.json()) as T;
+  return apiJson<T>(path, { ...init, headers, cache: "no-store" });
 }
 
 export interface SaaSCard {

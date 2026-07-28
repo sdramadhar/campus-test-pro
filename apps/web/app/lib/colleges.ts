@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiUrl } from "./auth";
+import { apiJson } from "./api-client";
 
 export type CollegeStatus = "ACTIVE" | "INACTIVE";
 
@@ -135,17 +135,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    credentials: "include",
-    headers,
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with ${String(response.status)}`);
-  }
-
-  return (await response.json()) as T;
+  return apiJson<T>(path, { ...init, headers });
 }
 
 export function toCollegePayload(values: CollegeFormValues) {

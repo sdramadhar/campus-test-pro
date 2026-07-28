@@ -1,4 +1,8 @@
-import { apiUrl } from "./auth";
+import {
+  authenticatedFetch,
+  isJsonResponse,
+  responseErrorMessage,
+} from "./api-client";
 
 export interface StudentAssessment {
   id: string;
@@ -105,26 +109,16 @@ export async function studentExamRequest<T>(
 ): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await authenticatedFetch(path, {
     ...init,
-    credentials: "include",
     headers,
     cache: "no-store",
   });
   if (!response.ok) {
-    const body = (await response
-      .json()
-      .catch((): { message?: unknown } => ({ message: "Request failed" }))) as {
-      message?: unknown;
-    };
-    const message = Array.isArray(body.message)
-      ? body.message
-          .filter((item): item is string => typeof item === "string")
-          .join(", ")
-      : typeof body.message === "string"
-        ? body.message
-        : "Request failed";
-    throw new Error(message);
+    throw new Error(await responseErrorMessage(response));
+  }
+  if (!isJsonResponse(response)) {
+    return undefined as T;
   }
   const body = (await response.json()) as ApiResponse<T>;
   return body.data;

@@ -57,6 +57,7 @@ export async function restoreSession(): Promise<AuthUser | null> {
 export async function requestPasswordReset(identifier: string): Promise<void> {
   const response = await fetch(`${apiUrl}/api/v1/auth/forgot-password`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ identifier }),
   });
@@ -71,6 +72,7 @@ export async function resetPassword(
 ): Promise<void> {
   const response = await fetch(`${apiUrl}/api/v1/auth/reset-password`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password }),
   });

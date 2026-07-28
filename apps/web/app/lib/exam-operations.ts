@@ -1,4 +1,8 @@
-import { apiUrl } from "./auth";
+import {
+  authenticatedFetch,
+  isJsonResponse,
+  responseErrorMessage,
+} from "./api-client";
 
 export async function examOpsRequest<T>(
   path: string,
@@ -6,25 +10,20 @@ export async function examOpsRequest<T>(
 ): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
-  const response = await fetch(`${apiUrl}${path}`, {
+  const response = await authenticatedFetch(path, {
     ...init,
-    credentials: "include",
     headers,
     cache: "no-store",
   });
   if (!response.ok) {
-    const body = (await response
-      .json()
-      .catch((): { message?: unknown } => ({ message: "Request failed" }))) as {
-      message?: unknown;
-    };
-    throw new Error(
-      typeof body.message === "string" ? body.message : "Request failed",
-    );
+    throw new Error(await responseErrorMessage(response));
   }
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("text/csv")) {
     return (await response.text()) as T;
+  }
+  if (!isJsonResponse(response)) {
+    return undefined as T;
   }
   const body = (await response.json()) as { success: true; data: T };
   return body.data;

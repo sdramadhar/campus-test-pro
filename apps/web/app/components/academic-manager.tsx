@@ -22,6 +22,11 @@ import {
   schemaFor,
   SingleResponse,
 } from "../lib/academic";
+import {
+  authenticatedFetch,
+  isJsonResponse,
+  responseErrorMessage,
+} from "../lib/api-client";
 
 type LookupMap = Partial<Record<EntityKey, EntityRecord[]>>;
 
@@ -159,9 +164,16 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
   }
 
   async function download(path: string, name: string): Promise<void> {
-    const response = await academicRequest<unknown>(path);
-    const blob = new Blob([JSON.stringify(response, null, 2)], {
-      type: "application/json",
+    const response = await authenticatedFetch(path);
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    const body = isJsonResponse(response)
+      ? JSON.stringify((await response.json()) as unknown, null, 2)
+      : await response.text();
+    const blob = new Blob([body], {
+      type: contentType || "application/json",
     });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -324,7 +336,11 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
           <div className="form-actions">
             <button
               onClick={() => {
-                void bulkCreate();
+                void bulkCreate().catch((error: unknown) => {
+                  setMessage(
+                    error instanceof Error ? error.message : "Student import failed.",
+                  );
+                });
               }}
               type="button"
             >
@@ -335,8 +351,14 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
               onClick={() => {
                 void download(
                   "/api/v1/students/template",
-                  "students-template.json",
-                );
+                  "student-import-template.json",
+                ).catch((error: unknown) => {
+                  setMessage(
+                    error instanceof Error
+                      ? error.message
+                      : "Template download failed.",
+                  );
+                });
               }}
               type="button"
             >
@@ -348,7 +370,11 @@ export function AcademicManager({ config }: { config: EntityConfig }) {
                 void download(
                   "/api/v1/students/export",
                   "students-export.json",
-                );
+                ).catch((error: unknown) => {
+                  setMessage(
+                    error instanceof Error ? error.message : "Student export failed.",
+                  );
+                });
               }}
               type="button"
             >

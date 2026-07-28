@@ -11,7 +11,7 @@
     "dev": "concurrently \"npm run dev --workspace apps/api\" \"npm run dev --workspace apps/web\"",
     "build": "npm run build --workspace packages/code-runner-contracts && npm run build --workspace packages/language-registry && npm run build --workspace apps/api && npm run build --workspace apps/web && npm run build --workspace apps/worker && npm run build --workspace apps/code-runner-gateway",
     "lint": "npm run lint --workspace packages/code-runner-contracts && npm run lint --workspace packages/language-registry && npm run lint --workspace apps/api && npm run lint --workspace apps/web && npm run lint --workspace apps/worker && npm run lint --workspace apps/code-runner-gateway",
-    "test": "npm run test --workspace apps/api",
+    "test": "npm run test --workspace apps/api && npm run test --workspace apps/web",
     "typecheck": "npm run typecheck --workspace packages/code-runner-contracts && npm run typecheck --workspace packages/language-registry && npm run typecheck --workspace apps/api && npm run typecheck --workspace apps/web && npm run typecheck --workspace apps/worker && npm run typecheck --workspace apps/code-runner-gateway",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

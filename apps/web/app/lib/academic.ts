@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiUrl } from "./auth";
+import { apiJson } from "./api-client";
 
 export type EntityKey =
   | "departments"
@@ -448,16 +448,7 @@ export async function academicRequest<T>(
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    credentials: "include",
-    headers,
-  });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Request failed.");
-  }
-  return (await response.json()) as T;
+  return apiJson<T>(path, { ...init, headers });
 }
 
 export function readValue(row: EntityRecord, key: string): string {
