@@ -14,7 +14,7 @@ import { ApiBody, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../../../generated/phase5-client";
 import { Request, Response } from "express";
 import { z } from "zod";
-import { env } from "../config/environment";
+import { authCookieOptions } from "./auth-cookies";
 import { AuthService } from "./auth.service";
 import { AuthenticatedUser } from "./auth.types";
 import { CurrentUser } from "./decorators/current-user.decorator";
@@ -169,30 +169,14 @@ export class AuthController {
     accessToken: string,
     refreshToken: string,
   ): void {
-    const current = env();
-    const secure = current.COOKIE_SECURE;
-    const domain = current.COOKIE_DOMAIN || undefined;
-    response.cookie("accessToken", accessToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure,
-      maxAge: current.ACCESS_TOKEN_TTL_SECONDS * 1000,
-      path: "/",
-      domain,
-    });
-    response.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure,
-      maxAge: current.REFRESH_TOKEN_TTL_SECONDS * 1000,
-      path: "/api/v1/auth",
-      domain,
-    });
+    const options = authCookieOptions();
+    response.cookie("accessToken", accessToken, options.accessToken);
+    response.cookie("refreshToken", refreshToken, options.refreshToken);
   }
 
   private clearAuthCookies(response: Response): void {
-    const domain = env().COOKIE_DOMAIN || undefined;
-    response.clearCookie("accessToken", { path: "/", domain });
-    response.clearCookie("refreshToken", { path: "/api/v1/auth", domain });
+    const options = authCookieOptions();
+    response.clearCookie("accessToken", options.clearAccessToken);
+    response.clearCookie("refreshToken", options.clearRefreshToken);
   }
 }

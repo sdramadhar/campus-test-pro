@@ -23,6 +23,7 @@ export default function QueueMonitorPage() {
         examOpsRequest<QueueSummary[]>("/api/v1/system/queues"),
         fetch(
           `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/api/v1/system/version`,
+          { credentials: "include" },
         ).then((response) => response.json()) as Promise<
           Record<string, string>
         >,
