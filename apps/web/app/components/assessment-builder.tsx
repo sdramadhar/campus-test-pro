@@ -170,6 +170,10 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
   const form = useForm<AssessmentFormValues>({
     defaultValues: emptyAssessment,
   });
+  const selectedSubjectId = form.watch("subjectId");
+  const attachedQuestionCount =
+    ((assessment?.assessmentQuestions as EntityRecord[] | undefined) ?? [])
+      .length;
 
   useEffect(() => {
     void Promise.all([
@@ -177,11 +181,6 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
         "/api/v1/subjects?page=1&pageSize=100",
       ).then((response) => {
         setSubjects(response.data);
-      }),
-      academicRequest<ListResponse>(
-        "/api/v1/questions?page=1&pageSize=100&status=ACTIVE",
-      ).then((response) => {
-        setQuestions(response.data);
       }),
       academicRequest<ListResponse>("/api/v1/batches?page=1&pageSize=100").then(
         (response) => {
@@ -195,6 +194,29 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
       }),
     ]);
   }, []);
+
+  useEffect(() => {
+    const query = new URLSearchParams({
+      page: "1",
+      pageSize: "100",
+      status: "ACTIVE",
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+    });
+    if (selectedSubjectId) {
+      query.set("subjectId", selectedSubjectId);
+    }
+    academicRequest<ListResponse>(`/api/v1/questions?${query.toString()}`)
+      .then((response) => {
+        setQuestions(response.data);
+      })
+      .catch((error: unknown) => {
+        setQuestions([]);
+        setMessage(
+          error instanceof Error ? error.message : "Unable to load questions.",
+        );
+      });
+  }, [selectedSubjectId]);
 
   useEffect(() => {
     if (!assessmentId) return;
@@ -388,7 +410,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
           const hasSections =
             ((assessment?.sections as EntityRecord[] | undefined) ?? [])
               .length > 0;
-          const disabled = item >= 3 && !hasSections;
+          const disabled = item >= 3 && (!hasSections || attachedQuestionCount === 0);
           return (
           <button
             className={step === item ? "active-step" : ""}
@@ -484,7 +506,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
             className="primary-action"
             disabled={
               ((assessment?.sections as EntityRecord[] | undefined) ?? [])
-                .length === 0
+                .length === 0 || attachedQuestionCount === 0
             }
             onClick={() => {
               setStep(3);
@@ -719,10 +741,10 @@ function SectionEditor({
                       }}
                       value={draft.questionId}
                     >
-                      <option value="">Select a question</option>
+                  <option value="">Select a question</option>
                       {questions.map((question) => (
                         <option key={question.id} value={question.id}>
-                          {readValue(question, "title")}
+                          {questionLabel(question)}
                         </option>
                       ))}
                     </select>
@@ -820,6 +842,14 @@ function sectionMarks(section: EntityRecord): string {
     }
   }
   return "0";
+}
+
+function questionLabel(question: EntityRecord): string {
+  const title = readValue(question, "title");
+  if (title !== "-") return title;
+  const text = readValue(question, "questionText");
+  if (text !== "-") return text;
+  return readValue(question, "id");
 }
 
 function ListItems({

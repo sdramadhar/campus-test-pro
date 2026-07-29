@@ -10,6 +10,9 @@ function main(): void {
 
   assert(source.includes("SectionEditor"));
   assert(source.includes("expandedSectionId"));
+  assert(source.includes("selectedSubjectId"));
+  assert(source.includes('query.set("subjectId", selectedSubjectId)'));
+  assert(source.includes("attachedQuestionCount"));
   assert(source.includes("Section Name"));
   assert(source.includes("Description"));
   assert(source.includes("Marks"));
@@ -18,6 +21,7 @@ function main(): void {
   assert(source.includes("Continue to Step 3"));
   assert(source.includes("sectionId"));
   assert(source.includes("Save Section"));
+  assert(source.includes("questionLabel(question)"));
 
   console.log("Assessment builder Step 2 tests passed.");
 }
