@@ -20,6 +20,10 @@ export function AiGeneratePanel() {
   const [status, setStatus] = useState<EntityRecord | null>(null);
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const configurationMessage =
+    typeof status?.configurationMessage === "string"
+      ? status.configurationMessage
+      : "";
 
   useEffect(() => {
     void Promise.all([
@@ -82,6 +86,9 @@ export function AiGeneratePanel() {
         <span>Model: {valueText(status?.model)}</span>
         <span>Quota: {valueText((status?.quota as EntityRecord | undefined)?.dailyRemaining)} daily remaining</span>
       </div>
+      {configurationMessage && (
+        <div className="form-alert">{configurationMessage}</div>
+      )}
       <form className="form-grid" onSubmit={(event) => void submit(event)}>
         <label>
           College ID

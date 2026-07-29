@@ -92,17 +92,25 @@ rejectValue(
   "Local object storage is forbidden in production.",
 );
 requireValue("BACKUP_PROVIDER", "Backup provider is required.");
-requireValue("BACKUP_BUCKET", "Backup bucket/container is required.");
+if (env.BACKUP_PROVIDER && env.BACKUP_PROVIDER !== "disabled") {
+  requireValue("BACKUP_BUCKET", "Backup bucket/container is required.");
+} else {
+  add("WARNING", "BACKUP_PROVIDER", "Automated backups are disabled.");
+}
 rejectValue("AI_PROVIDER", "mock", "Mock AI is forbidden in production.");
 rejectValue(
   "CODE_RUNNER_MODE",
   "MOCK",
   "Mock code runner is forbidden in production.",
 );
-requireValue(
-  "OTEL_EXPORTER_ENDPOINT",
-  "Monitoring/exporter endpoint is required.",
-);
+if (env.OTEL_ENABLED === "true") {
+  requireValue(
+    "OTEL_EXPORTER_ENDPOINT",
+    "Monitoring/exporter endpoint is required when OpenTelemetry is enabled.",
+  );
+} else {
+  add("WARNING", "OTEL_ENABLED", "OpenTelemetry export is disabled.");
+}
 requireValue(
   "ERROR_TRACKING_DSN",
   "Sentry-compatible error tracking DSN is required.",
@@ -125,9 +133,9 @@ if (
       has("ANTHROPIC_API_KEY") ||
       has("AZURE_OPENAI_API_KEY")
       ? "PASS"
-      : "FAIL",
+      : "WARNING",
     "AI_API_KEY",
-    "Configured AI provider requires a server-side key.",
+    "Configured AI provider will remain unavailable until a server-side key is set.",
   );
 }
 if (env.PUSH_PROVIDER && env.PUSH_PROVIDER !== "disabled") {

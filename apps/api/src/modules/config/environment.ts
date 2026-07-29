@@ -306,22 +306,6 @@ export const environmentSchema = z
       }
       if (
         env.AI_FEATURE_ENABLED === "true" &&
-        env.AI_PROVIDER !== "mock" &&
-        env.AI_PROVIDER !== "ollama" &&
-        !env.AI_API_KEY &&
-        !env.OPENAI_API_KEY &&
-        !env.GOOGLE_GEMINI_API_KEY &&
-        !env.ANTHROPIC_API_KEY &&
-        !env.AZURE_OPENAI_API_KEY
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["AI_API_KEY"],
-          message: "Configured AI provider requires a server-side API key.",
-        });
-      }
-      if (
-        env.AI_FEATURE_ENABLED === "true" &&
         env.AI_PROVIDER === "azure-openai" &&
         (!env.AZURE_OPENAI_ENDPOINT || !env.AZURE_OPENAI_DEPLOYMENT)
       ) {

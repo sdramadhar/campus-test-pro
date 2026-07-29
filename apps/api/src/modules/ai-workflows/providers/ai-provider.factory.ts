@@ -1,5 +1,5 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { env } from "../../config/environment";
+import { AppEnvironment, env } from "../../config/environment";
 import { AiProvider, AiProviderError } from "./ai-provider";
 import {
   AnthropicProvider,
@@ -17,7 +17,7 @@ export class AiProviderFactory {
 
   getProvider(): AiProvider {
     const current = env();
-    if (current.AI_FEATURE_ENABLED !== "true") {
+    if (!this.isFeatureEnabled(current)) {
       throw new ServiceUnavailableException("AI features are disabled.");
     }
     if (this.disabledUntil && this.disabledUntil > new Date()) {
@@ -34,8 +34,14 @@ export class AiProviderFactory {
       return new MockAiProvider(current.AI_MODEL);
     }
     if (current.AI_PROVIDER === "openai") {
+      const apiKey = current.OPENAI_API_KEY ?? current.AI_API_KEY;
+      if (!apiKey) {
+        throw new ServiceUnavailableException(
+          "OpenAI question generation is not configured. Set OPENAI_API_KEY in the API environment.",
+        );
+      }
       return new OpenAiProvider({
-        apiKey: current.OPENAI_API_KEY ?? current.AI_API_KEY,
+        apiKey,
         model: current.AI_MODEL,
       });
     }
@@ -97,10 +103,15 @@ export class AiProviderFactory {
   }
 
   providerStatus() {
+    const current = env();
+    const featureEnabled = this.isFeatureEnabled(current);
+    const configurationMessage = this.configurationMessage(current);
     return {
-      featureEnabled: env().AI_FEATURE_ENABLED === "true",
-      provider: env().AI_PROVIDER,
-      model: env().AI_MODEL,
+      featureEnabled,
+      provider: current.AI_PROVIDER,
+      model: current.AI_MODEL,
+      configured: featureEnabled && !configurationMessage,
+      configurationMessage,
       supportedProviders: [
         "mock",
         "openai",
@@ -111,6 +122,33 @@ export class AiProviderFactory {
       ],
       disabledUntil: this.disabledUntil?.toISOString() ?? null,
     };
+  }
+
+  isFeatureEnabled(current: AppEnvironment = env()): boolean {
+    if (current.AI_FEATURE_ENABLED === "true") return true;
+    return current.AI_PROVIDER === "openai" && Boolean(current.OPENAI_API_KEY);
+  }
+
+  configurationMessage(current: AppEnvironment = env()): string | null {
+    if (!this.isFeatureEnabled(current)) return "AI features are disabled.";
+    if (current.AI_PROVIDER === "openai" && !current.OPENAI_API_KEY && !current.AI_API_KEY) {
+      return "OpenAI question generation is not configured. Set OPENAI_API_KEY in the API environment.";
+    }
+    if (current.AI_PROVIDER === "azure-openai") {
+      if (!current.AZURE_OPENAI_API_KEY && !current.AI_API_KEY) {
+        return "Azure OpenAI is not configured. Set AZURE_OPENAI_API_KEY in the API environment.";
+      }
+      if (!current.AZURE_OPENAI_ENDPOINT || !current.AZURE_OPENAI_DEPLOYMENT) {
+        return "Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT in the API environment.";
+      }
+    }
+    if (current.AI_PROVIDER === "gemini" && !current.GOOGLE_GEMINI_API_KEY && !current.AI_API_KEY) {
+      return "Gemini is not configured. Set GOOGLE_GEMINI_API_KEY in the API environment.";
+    }
+    if (current.AI_PROVIDER === "anthropic" && !current.ANTHROPIC_API_KEY && !current.AI_API_KEY) {
+      return "Anthropic is not configured. Set ANTHROPIC_API_KEY in the API environment.";
+    }
+    return null;
   }
 
   private async withTimeout<T>(promise: Promise<T>, timeoutMs: number) {

@@ -97,7 +97,7 @@ export class AiWorkflowsService {
   async generateQuestions(user: AuthenticatedUser, dto: GenerateQuestionsDto) {
     this.ensureAiUser(user);
     const current = env();
-    if (current.AI_FEATURE_ENABLED !== "true") {
+    if (!this.providerFactory.isFeatureEnabled(current)) {
       throw new ServiceUnavailableException("AI features are disabled.");
     }
     if (dto.requestedCount > current.AI_MAX_QUESTIONS_PER_REQUEST) {
@@ -705,12 +705,15 @@ export class AiWorkflowsService {
   settings(user: AuthenticatedUser) {
     this.ensureAdmin(user);
     const current = env();
+    const providerStatus = this.providerFactory.providerStatus();
     return {
       success: true,
       data: {
-        featureEnabled: current.AI_FEATURE_ENABLED === "true",
+        featureEnabled: providerStatus.featureEnabled,
         provider: current.AI_PROVIDER,
         model: current.AI_MODEL,
+        configured: providerStatus.configured,
+        configurationMessage: providerStatus.configurationMessage,
         dailyLimit: current.AI_DAILY_LIMIT,
         monthlyLimit: current.AI_MONTHLY_LIMIT,
         maxQuestionsPerRequest: current.AI_MAX_QUESTIONS_PER_REQUEST,
