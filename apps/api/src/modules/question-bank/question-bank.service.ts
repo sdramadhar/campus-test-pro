@@ -549,6 +549,35 @@ export class QuestionBankService {
     return { success: true, data: assessment };
   }
 
+  async assessmentQuestionOptions(user: TenantUser, assessmentId: string) {
+    const assessment = await this.findAssessment(user, assessmentId);
+    const collegeId = assessment.collegeId ?? "";
+    const where: Prisma.QuestionWhereInput = {
+      ...this.questionScopeWhere(user, collegeId),
+      deletedAt: null,
+      status: QuestionStatus.ACTIVE,
+      ...(assessment.subjectId ? { subjectId: assessment.subjectId } : {}),
+    };
+    const questions = await this.prisma.question.findMany({
+      where,
+      include: questionInclude,
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+    });
+    return {
+      success: true,
+      data: questions,
+      debug: {
+        assessmentId: assessment.id,
+        selectedSubjectId: assessment.subjectId,
+        collegeId,
+        endpoint: `/api/v1/assessments/${assessment.id}/question-options`,
+        status: "ACTIVE",
+        returnedQuestionCount: questions.length,
+      },
+    };
+  }
+
   async createAssessment(user: TenantUser, dto: CreateAssessmentDto) {
     const collegeId = this.scopeCollege(user, dto.collegeId, true);
     if (dto.subjectId)

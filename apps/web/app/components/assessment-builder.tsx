@@ -48,6 +48,22 @@ interface SectionDraft {
   questionId: string;
 }
 
+interface QuestionOptionsResponse extends ListResponse {
+  debug?: {
+    endpoint: string;
+    selectedSubjectId: string | null;
+    returnedQuestionCount: number;
+    status: string;
+  };
+}
+
+interface QuestionOptionsDebug {
+  endpoint: string;
+  selectedSubjectId: string;
+  returnedQuestionCount: number;
+  status: string;
+}
+
 export function AssessmentList() {
   const [rows, setRows] = useState<EntityRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -161,6 +177,12 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
   const [assessment, setAssessment] = useState<EntityRecord | null>(null);
   const [step, setStep] = useState(1);
   const [message, setMessage] = useState("");
+  const [questionDebug, setQuestionDebug] = useState<QuestionOptionsDebug>({
+    endpoint: "/api/v1/questions",
+    selectedSubjectId: "",
+    returnedQuestionCount: 0,
+    status: "not loaded",
+  });
   const [expandedSectionId, setExpandedSectionId] = useState<string | null>(
     null,
   );
@@ -170,7 +192,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
   const form = useForm<AssessmentFormValues>({
     defaultValues: emptyAssessment,
   });
-  const selectedSubjectId = form.watch("subjectId");
+  const selectedSubjectId = form.watch("subjectId") ?? "";
   const attachedQuestionCount =
     ((assessment?.assessmentQuestions as EntityRecord[] | undefined) ?? [])
       .length;
@@ -195,7 +217,27 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     ]);
   }, []);
 
-  useEffect(() => {
+  const loadQuestionOptions = useCallback(async () => {
+    const assessmentSubjectId =
+      assessment && readValue(assessment, "subjectId") !== "-"
+        ? readValue(assessment, "subjectId")
+        : "";
+    const effectiveSubjectId =
+      assessmentSubjectId || selectedSubjectId;
+    if (assessment?.id) {
+      const endpoint = `/api/v1/assessments/${assessment.id}/question-options`;
+      const response = await academicRequest<QuestionOptionsResponse>(endpoint);
+      setQuestions(response.data);
+      setQuestionDebug({
+        endpoint,
+        selectedSubjectId:
+          response.debug?.selectedSubjectId ?? effectiveSubjectId,
+        returnedQuestionCount:
+          response.debug?.returnedQuestionCount ?? response.data.length,
+        status: response.debug?.status ?? "ACTIVE",
+      });
+      return;
+    }
     const query = new URLSearchParams({
       page: "1",
       pageSize: "100",
@@ -206,17 +248,30 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     if (selectedSubjectId) {
       query.set("subjectId", selectedSubjectId);
     }
-    academicRequest<ListResponse>(`/api/v1/questions?${query.toString()}`)
-      .then((response) => {
-        setQuestions(response.data);
-      })
-      .catch((error: unknown) => {
-        setQuestions([]);
-        setMessage(
-          error instanceof Error ? error.message : "Unable to load questions.",
-        );
-      });
-  }, [selectedSubjectId]);
+    const endpoint = `/api/v1/questions?${query.toString()}`;
+    const response = await academicRequest<ListResponse>(endpoint);
+    setQuestions(response.data);
+    setQuestionDebug({
+      endpoint,
+      selectedSubjectId: effectiveSubjectId,
+      returnedQuestionCount: response.data.length,
+      status: "ACTIVE",
+    });
+  }, [assessment, selectedSubjectId]);
+
+  useEffect(() => {
+    loadQuestionOptions().catch((error: unknown) => {
+      setQuestions([]);
+      setQuestionDebug((current) => ({
+        ...current,
+        returnedQuestionCount: 0,
+        status: "error",
+      }));
+      setMessage(
+        error instanceof Error ? error.message : "Unable to load questions.",
+      );
+    });
+  }, [loadQuestionOptions]);
 
   useEffect(() => {
     if (!assessmentId) return;
@@ -304,6 +359,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     );
     setExpandedSectionId(response.data.id);
     await reloadAssessment();
+    await loadQuestionOptions();
   }
 
   async function saveSection(sectionId: string): Promise<void> {
@@ -343,6 +399,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     });
     setMessage("Question added to section.");
     await reloadAssessment();
+    await loadQuestionOptions();
   }
 
   async function assignBatch(batchId: string): Promise<void> {
@@ -499,8 +556,11 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
               setExpandedSectionId((current) =>
                 current === sectionId ? null : sectionId,
               );
+              void loadQuestionOptions();
             }}
+            questionDebug={questionDebug}
             questions={questions}
+            subjectName={selectedSubjectName(subjects, selectedSubjectId)}
           />
           <button
             className="primary-action"
@@ -635,7 +695,9 @@ function SectionEditor({
   onDraftChange,
   onSaveSection,
   onToggle,
+  questionDebug,
   questions,
+  subjectName,
 }: {
   assessment: EntityRecord | null;
   drafts: Record<string, SectionDraft>;
@@ -644,7 +706,9 @@ function SectionEditor({
   onDraftChange: (sectionId: string, next: SectionDraft) => void;
   onSaveSection: (sectionId: string) => void;
   onToggle: (sectionId: string) => void;
+  questionDebug: QuestionOptionsDebug;
   questions: EntityRecord[];
+  subjectName: string;
 }) {
   const sections = (assessment?.sections as EntityRecord[] | undefined) ?? [];
   const assignedQuestions =
@@ -750,6 +814,15 @@ function SectionEditor({
                     </select>
                   </label>
                 </div>
+                {questions.length === 0 && (
+                  <div className="form-alert">
+                    No active questions found for {subjectName || "this subject"}.
+                    Selected subject ID: {questionDebug.selectedSubjectId || "-"}.
+                    Endpoint: {questionDebug.endpoint}. Returned question count:{" "}
+                    {String(questionDebug.returnedQuestionCount)}.{" "}
+                    <Link href="/questions">Open Question Bank</Link>
+                  </div>
+                )}
                 <div className="form-actions">
                   <button
                     onClick={() => {
@@ -850,6 +923,11 @@ function questionLabel(question: EntityRecord): string {
   const text = readValue(question, "questionText");
   if (text !== "-") return text;
   return readValue(question, "id");
+}
+
+function selectedSubjectName(subjects: EntityRecord[], subjectId: string): string {
+  const subject = subjects.find((item) => item.id === subjectId);
+  return subject ? readValue(subject, "subjectName") : "this subject";
 }
 
 function ListItems({

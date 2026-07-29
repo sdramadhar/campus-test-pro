@@ -11,6 +11,7 @@ function main(): void {
   assert(source.includes("SectionEditor"));
   assert(source.includes("expandedSectionId"));
   assert(source.includes("selectedSubjectId"));
+  assert(source.includes("/question-options"));
   assert(source.includes('query.set("subjectId", selectedSubjectId)'));
   assert(source.includes("attachedQuestionCount"));
   assert(source.includes("Section Name"));
@@ -22,6 +23,9 @@ function main(): void {
   assert(source.includes("sectionId"));
   assert(source.includes("Save Section"));
   assert(source.includes("questionLabel(question)"));
+  assert(source.includes("No active questions found for"));
+  assert(source.includes("Returned question count"));
+  assert(source.includes("Open Question Bank"));
 
   console.log("Assessment builder Step 2 tests passed.");
 }

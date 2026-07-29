@@ -171,6 +171,14 @@ export class AssessmentsController extends QuestionBankBaseController {
     return this.service.getAssessment(user, id);
   }
 
+  @Get(":id/question-options")
+  questionOptions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ) {
+    return this.service.assessmentQuestionOptions(user, id);
+  }
+
   @Patch(":id")
   update(
     @CurrentUser() user: AuthenticatedUser,
