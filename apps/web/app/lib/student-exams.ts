@@ -59,6 +59,8 @@ export interface StudentAttempt {
     title: string;
     instructions?: string | null;
     allowBackNavigation: boolean;
+    fullscreenPreferred?: boolean;
+    subject?: { id: string; subjectName: string; subjectCode?: string } | null;
   };
   sections: Array<{ id: string; name: string; displayOrder: number }>;
   questions: AttemptQuestion[];
