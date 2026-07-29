@@ -1,6 +1,15 @@
 "use client";
 
-import { CalendarClock, Eye, Plus, Rocket, Save, Search } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  Plus,
+  Rocket,
+  Save,
+  Search,
+} from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -30,6 +39,14 @@ const emptyAssessment: AssessmentFormValues = {
   shuffleQuestions: false,
   shuffleOptions: false,
 };
+
+interface SectionDraft {
+  name: string;
+  description: string;
+  marks: string;
+  displayOrder: string;
+  questionId: string;
+}
 
 export function AssessmentList() {
   const [rows, setRows] = useState<EntityRecord[]>([]);
@@ -144,6 +161,12 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
   const [assessment, setAssessment] = useState<EntityRecord | null>(null);
   const [step, setStep] = useState(1);
   const [message, setMessage] = useState("");
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(
+    null,
+  );
+  const [sectionDrafts, setSectionDrafts] = useState<
+    Record<string, SectionDraft>
+  >({});
   const form = useForm<AssessmentFormValues>({
     defaultValues: emptyAssessment,
   });
@@ -178,6 +201,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     academicRequest<SingleResponse>(`/api/v1/assessments/${assessmentId}`)
       .then((response) => {
         setAssessment(response.data);
+        syncSectionDrafts(response.data, setSectionDrafts);
         form.reset({
           ...emptyAssessment,
           title:
@@ -243,23 +267,50 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
 
   async function addSection(): Promise<void> {
     if (!assessment?.id) return;
-    await academicRequest(`/api/v1/assessments/${assessment.id}/sections`, {
+    const response = await academicRequest<SingleResponse>(
+      `/api/v1/assessments/${assessment.id}/sections`,
+      {
       method: "POST",
       body: JSON.stringify({
         name: `Section ${String(Date.now()).slice(-4)}`,
+        description: "",
+        marks: 0,
         displayOrder:
           ((assessment.sections as unknown[] | undefined)?.length ?? 0) + 1,
       }),
-    });
+      },
+    );
+    setExpandedSectionId(response.data.id);
     await reloadAssessment();
   }
 
-  async function addQuestion(questionId: string): Promise<void> {
+  async function saveSection(sectionId: string): Promise<void> {
+    if (!assessment?.id) return;
+    const draft = sectionDrafts[sectionId];
+    if (!draft) return;
+    await academicRequest(
+      `/api/v1/assessments/${assessment.id}/sections/${sectionId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: draft.name,
+          description: draft.description,
+          marks: Number(draft.marks || 0),
+          displayOrder: Number(draft.displayOrder || 1),
+        }),
+      },
+    );
+    setMessage("Section saved.");
+    await reloadAssessment();
+  }
+
+  async function addQuestion(questionId: string, sectionId?: string): Promise<void> {
     if (!assessment?.id) return;
     await academicRequest(`/api/v1/assessments/${assessment.id}/questions`, {
       method: "POST",
       body: JSON.stringify({
         questionId,
+        sectionId,
         displayOrder:
           ((assessment.assessmentQuestions as unknown[] | undefined)?.length ??
             0) + 1,
@@ -268,6 +319,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
         mandatory: true,
       }),
     });
+    setMessage("Question added to section.");
     await reloadAssessment();
   }
 
@@ -322,6 +374,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
       `/api/v1/assessments/${assessment.id}`,
     );
     setAssessment(response.data);
+    syncSectionDrafts(response.data, setSectionDrafts);
   }
 
   return (
@@ -331,18 +384,25 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     >
       {message && <div className="success-alert">{message}</div>}
       <div className="step-tabs">
-        {[1, 2, 3, 4, 5, 6, 7].map((item) => (
+        {[1, 2, 3, 4, 5, 6, 7].map((item) => {
+          const hasSections =
+            ((assessment?.sections as EntityRecord[] | undefined) ?? [])
+              .length > 0;
+          const disabled = item >= 3 && !hasSections;
+          return (
           <button
             className={step === item ? "active-step" : ""}
+            disabled={disabled}
             key={item}
             onClick={() => {
-              setStep(item);
+              if (!disabled) setStep(item);
             }}
             type="button"
           >
             Step {item}
           </button>
-        ))}
+          );
+        })}
       </div>
       {step === 1 && (
         <section className="panel form-section">
@@ -399,10 +459,40 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
             <Plus size={18} />
             Add Section
           </button>
-          <ListItems
-            rows={(assessment?.sections as EntityRecord[] | undefined) ?? []}
-            labelKey="name"
+          <SectionEditor
+            assessment={assessment}
+            drafts={sectionDrafts}
+            expandedSectionId={expandedSectionId}
+            onAddQuestion={(questionId, sectionId) =>
+              void addQuestion(questionId, sectionId)
+            }
+            onDraftChange={(sectionId, next) => {
+              setSectionDrafts((current) => ({
+                ...current,
+                [sectionId]: next,
+              }));
+            }}
+            onSaveSection={(sectionId) => void saveSection(sectionId)}
+            onToggle={(sectionId) => {
+              setExpandedSectionId((current) =>
+                current === sectionId ? null : sectionId,
+              );
+            }}
+            questions={questions}
           />
+          <button
+            className="primary-action"
+            disabled={
+              ((assessment?.sections as EntityRecord[] | undefined) ?? [])
+                .length === 0
+            }
+            onClick={() => {
+              setStep(3);
+            }}
+            type="button"
+          >
+            Continue to Step 3
+          </button>
         </section>
       )}
       {step === 3 && (
@@ -513,6 +603,223 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
       )}
     </form>
   );
+}
+
+function SectionEditor({
+  assessment,
+  drafts,
+  expandedSectionId,
+  onAddQuestion,
+  onDraftChange,
+  onSaveSection,
+  onToggle,
+  questions,
+}: {
+  assessment: EntityRecord | null;
+  drafts: Record<string, SectionDraft>;
+  expandedSectionId: string | null;
+  onAddQuestion: (questionId: string, sectionId: string) => void;
+  onDraftChange: (sectionId: string, next: SectionDraft) => void;
+  onSaveSection: (sectionId: string) => void;
+  onToggle: (sectionId: string) => void;
+  questions: EntityRecord[];
+}) {
+  const sections = (assessment?.sections as EntityRecord[] | undefined) ?? [];
+  const assignedQuestions =
+    (assessment?.assessmentQuestions as EntityRecord[] | undefined) ?? [];
+
+  if (sections.length === 0) {
+    return <div className="empty-panel">Add a section to start editing.</div>;
+  }
+
+  return (
+    <div className="activity-list">
+      {sections.map((section) => {
+        const draft = drafts[section.id] ?? draftFromSection(section);
+        const isOpen = expandedSectionId === section.id;
+        const attached = assignedQuestions.filter(
+          (item) => readValue(item, "sectionId") === section.id,
+        );
+        return (
+          <div className="section-editor" key={section.id}>
+            <button
+              className="section-toggle"
+              onClick={() => {
+                onToggle(section.id);
+              }}
+              type="button"
+            >
+              {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              <strong>{draft.name || readValue(section, "name")}</strong>
+              <span>{String(attached.length)} question(s)</span>
+            </button>
+            {isOpen && (
+              <div className="entity-form">
+                <div className="form-grid">
+                  <label className="form-field">
+                    Section Name
+                    <input
+                      onChange={(event) => {
+                        onDraftChange(section.id, {
+                          ...draft,
+                          name: event.target.value,
+                        });
+                      }}
+                      value={draft.name}
+                    />
+                  </label>
+                  <label className="form-field">
+                    Marks
+                    <input
+                      min="0"
+                      onChange={(event) => {
+                        onDraftChange(section.id, {
+                          ...draft,
+                          marks: event.target.value,
+                        });
+                      }}
+                      type="number"
+                      value={draft.marks}
+                    />
+                  </label>
+                  <label className="form-field">
+                    Question Order
+                    <input
+                      min="1"
+                      onChange={(event) => {
+                        onDraftChange(section.id, {
+                          ...draft,
+                          displayOrder: event.target.value,
+                        });
+                      }}
+                      type="number"
+                      value={draft.displayOrder}
+                    />
+                  </label>
+                  <label className="form-field wide-field">
+                    Description
+                    <textarea
+                      onChange={(event) => {
+                        onDraftChange(section.id, {
+                          ...draft,
+                          description: event.target.value,
+                        });
+                      }}
+                      value={draft.description}
+                    />
+                  </label>
+                  <label className="form-field wide-field">
+                    Question
+                    <select
+                      onChange={(event) => {
+                        onDraftChange(section.id, {
+                          ...draft,
+                          questionId: event.target.value,
+                        });
+                      }}
+                      value={draft.questionId}
+                    >
+                      <option value="">Select a question</option>
+                      {questions.map((question) => (
+                        <option key={question.id} value={question.id}>
+                          {readValue(question, "title")}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="form-actions">
+                  <button
+                    onClick={() => {
+                      onSaveSection(section.id);
+                    }}
+                    type="button"
+                  >
+                    <Save size={18} />
+                    Save Section
+                  </button>
+                  <button
+                    disabled={!draft.questionId}
+                    onClick={() => {
+                      if (!draft.questionId) return;
+                      onAddQuestion(draft.questionId, section.id);
+                      onDraftChange(section.id, { ...draft, questionId: "" });
+                    }}
+                    type="button"
+                  >
+                    <Plus size={18} />
+                    Add Question
+                  </button>
+                </div>
+                <div className="activity-list">
+                  {attached.length === 0 ? (
+                    <div>No questions attached yet.</div>
+                  ) : (
+                    attached.map((item) => (
+                      <div key={item.id}>
+                        <strong>{nestedValue(item, "question.title")}</strong>
+                        <span>
+                          Marks {readValue(item, "assignedMarks")} · Order{" "}
+                          {readValue(item, "displayOrder")}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function syncSectionDrafts(
+  assessment: EntityRecord,
+  setSectionDrafts: (
+    updater: (current: Record<string, SectionDraft>) => Record<string, SectionDraft>,
+  ) => void,
+): void {
+  const sections = (assessment.sections as EntityRecord[] | undefined) ?? [];
+  setSectionDrafts((current) => {
+    const next = { ...current };
+    for (const section of sections) {
+      next[section.id] = next[section.id] ?? draftFromSection(section);
+    }
+    return next;
+  });
+}
+
+function draftFromSection(section: EntityRecord): SectionDraft {
+  return {
+    name: readValue(section, "name") === "-" ? "" : readValue(section, "name"),
+    description:
+      readValue(section, "description") === "-"
+        ? ""
+        : readValue(section, "description"),
+    marks: sectionMarks(section),
+    displayOrder:
+      readValue(section, "displayOrder") === "-"
+        ? "1"
+        : readValue(section, "displayOrder"),
+    questionId: "",
+  };
+}
+
+function sectionMarks(section: EntityRecord): string {
+  const marksRule = section.marksRule;
+  if (
+    marksRule &&
+    typeof marksRule === "object" &&
+    "sectionMarks" in marksRule
+  ) {
+    const value = (marksRule as { sectionMarks?: unknown }).sectionMarks;
+    if (typeof value === "string" || typeof value === "number") {
+      return String(value);
+    }
+  }
+  return "0";
 }
 
 function ListItems({

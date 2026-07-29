@@ -381,6 +381,13 @@ export class AssessmentSectionDto {
   @IsString()
   instructions?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  marks?: number;
+
   @ApiProperty()
   @Transform(({ value }) => Number(value))
   @IsInt()

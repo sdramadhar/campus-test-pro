@@ -645,6 +645,8 @@ export class QuestionBankService {
         description: this.optional(dto.description),
         instructions: this.optional(dto.instructions),
         displayOrder: dto.displayOrder,
+        marksRule:
+          dto.marks === undefined ? undefined : { sectionMarks: dto.marks },
       },
     });
     return { success: true, data: section };
@@ -664,6 +666,8 @@ export class QuestionBankService {
         description: this.optional(dto.description),
         instructions: this.optional(dto.instructions),
         displayOrder: dto.displayOrder,
+        marksRule:
+          dto.marks === undefined ? undefined : { sectionMarks: dto.marks },
       },
     });
     return { success: true, data: section };
