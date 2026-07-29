@@ -44,6 +44,10 @@ export type AiJob = EntityRecord & {
   rejectedCount?: number;
   provider?: string;
   model?: string;
+  errorMessage?: string;
+  errorCode?: string;
+  errorSummary?: string;
+  failedAt?: string;
   results?: EntityRecord[];
 };
 

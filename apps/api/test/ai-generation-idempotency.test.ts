@@ -18,6 +18,11 @@ function main(): void {
   assert(serviceSource.includes('path: ["idempotencyKey"]'));
   assert(serviceSource.includes("equals: idempotencyKey"));
   assert(serviceSource.includes("return { success: true, data: await this.getJobData(user, existingJob.id) }"));
+  assert(serviceSource.includes("this.logger.error"));
+  assert(serviceSource.includes("errorMessage: normalized.message"));
+  assert(serviceSource.includes("errorCode: normalized.code"));
+  assert(serviceSource.includes("failedAt: new Date()"));
+  assert(serviceSource.includes("throw error"));
 
   console.log("AI generation idempotency tests passed.");
 }

@@ -14,6 +14,8 @@ export function AiReviewPanel({ jobId }: { jobId: string }) {
     () => (Array.isArray(job?.results) ? job.results : []),
     [job],
   );
+  const failedJob = job?.status === "FAILED" ? job : null;
+  const failureMessage = failedJob?.errorMessage ?? failedJob?.errorSummary;
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +68,15 @@ export function AiReviewPanel({ jobId }: { jobId: string }) {
         <span>Approved: {valueText(job?.approvedCount)}</span>
         <span>Rejected: {valueText(job?.rejectedCount)}</span>
       </div>
+      {failedJob && (
+        <div className="form-alert">
+          <strong>AI generation failed.</strong>
+          <div>Error code: {valueText(failedJob.errorCode)}</div>
+          <div>Provider: {valueText(failedJob.provider)} / {valueText(failedJob.model)}</div>
+          <div>Failed at: {valueText(failedJob.failedAt)}</div>
+          <div>{valueText(failureMessage)}</div>
+        </div>
+      )}
       <div className="toolbar">
         <button onClick={() => void review("approve")} type="button">Approve selected</button>
         <button onClick={() => void review("reject")} type="button">Reject selected</button>

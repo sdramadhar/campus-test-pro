@@ -63,15 +63,16 @@ function parseProviderJson(text: string): AiProviderResponse {
 }
 
 async function readError(response: Response): Promise<string> {
+  const text = await response.text().catch(() => "");
   try {
-    const body = (await response.json()) as JsonRecord;
+    const body = text ? (JSON.parse(text) as JsonRecord) : {};
     const error = body.error;
     if (error && typeof error === "object" && "message" in error) {
-      return String((error as JsonRecord).message).slice(0, 300);
+      return `HTTP ${String(response.status)} ${response.statusText}: ${String((error as JsonRecord).message)}. Provider response body: ${text}`.slice(0, 4000);
     }
-    return JSON.stringify(body).slice(0, 300);
+    return `HTTP ${String(response.status)} ${response.statusText}. Provider response body: ${text || JSON.stringify(body)}`.slice(0, 4000);
   } catch {
-    return response.statusText.slice(0, 300);
+    return `HTTP ${String(response.status)} ${response.statusText}. Provider response body: ${text}`.slice(0, 4000);
   }
 }
 

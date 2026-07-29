@@ -14,6 +14,15 @@ function main(): void {
   assert(panelSource.includes("idempotencyKey: createGenerationIdempotencyKey()"));
   assert(panelSource.includes('setMessage("Generation job queued.")'));
 
+  const reviewSource = readFileSync(
+    resolve("app/components/ai-review-panel.tsx"),
+    "utf8",
+  );
+  assert(reviewSource.includes('failedJob = job?.status === "FAILED" ? job : null'));
+  assert(reviewSource.includes("AI generation failed."));
+  assert(reviewSource.includes("failedJob.errorCode"));
+  assert(reviewSource.includes("failedJob.failedAt"));
+
   console.log("AI generate panel configuration tests passed.");
 }
 

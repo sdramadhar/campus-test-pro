@@ -2146,6 +2146,9 @@ model AiGenerationJob {
   estimatedCostMetadata Json?
   status                AiGenerationJobStatus @default(DRAFT)
   errorSummary          String?
+  errorMessage          String?
+  errorCode             String?
+  failedAt              DateTime?
   expiresAt             DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt

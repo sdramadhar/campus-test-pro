@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -78,6 +79,8 @@ const supportedTextMimeTypes = new Set([
 
 @Injectable()
 export class AiWorkflowsService {
+  private readonly logger = new Logger(AiWorkflowsService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AiProviderFactory) private readonly providerFactory: AiProviderFactory,
@@ -201,7 +204,7 @@ export class AiWorkflowsService {
       },
     });
 
-    void this.processGenerationJob(user, job.id);
+    this.runGenerationJob(user, job.id);
     return { success: true, data: await this.getJobData(user, job.id) };
   }
 
@@ -316,10 +319,16 @@ export class AiWorkflowsService {
     });
     await this.prisma.aiGenerationJob.updateMany({
       where: { id: { in: failed.map((job) => job.id) } },
-      data: { status: AiGenerationJobStatus.QUEUED, errorSummary: null },
+      data: {
+        status: AiGenerationJobStatus.QUEUED,
+        errorSummary: null,
+        errorMessage: null,
+        errorCode: null,
+        failedAt: null,
+      },
     });
     for (const job of failed) {
-      void this.processGenerationJob(user, job.id);
+      this.runGenerationJob(user, job.id);
     }
     await this.prisma.aiBatchGeneration.update({
       where: { id: batchId },
@@ -399,7 +408,17 @@ export class AiWorkflowsService {
       where: { jobId, reviewStatus: AiReviewStatus.PENDING },
       data: { reviewStatus: AiReviewStatus.REJECTED, rejectionReason: "Regenerated" },
     });
-    void this.processGenerationJob(user, jobId);
+    await this.prisma.aiGenerationJob.update({
+      where: { id: jobId },
+      data: {
+        status: AiGenerationJobStatus.QUEUED,
+        errorSummary: null,
+        errorMessage: null,
+        errorCode: null,
+        failedAt: null,
+      },
+    });
+    this.runGenerationJob(user, jobId);
     return { success: true, data: await this.getJobData(user, jobId) };
   }
 
@@ -1603,6 +1622,15 @@ export class AiWorkflowsService {
     return batch;
   }
 
+  private runGenerationJob(user: AuthenticatedUser, jobId: string): void {
+    void this.processGenerationJob(user, jobId).catch((error: unknown) => {
+      this.logger.error(
+        `AI generation job ${jobId} failed after diagnostics were persisted.`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    });
+  }
+
   private async processGenerationJob(user: AuthenticatedUser, jobId: string) {
     const job = await this.prisma.aiGenerationJob.findUnique({
       where: { id: jobId },
@@ -1611,7 +1639,13 @@ export class AiWorkflowsService {
     if (!job || job.status === AiGenerationJobStatus.CANCELLED) return;
     await this.prisma.aiGenerationJob.update({
       where: { id: jobId },
-      data: { status: AiGenerationJobStatus.PROCESSING },
+      data: {
+        status: AiGenerationJobStatus.PROCESSING,
+        errorSummary: null,
+        errorMessage: null,
+        errorCode: null,
+        failedAt: null,
+      },
     });
     try {
       const provider = this.providerFactory.getProvider();
@@ -1687,6 +1721,10 @@ export class AiWorkflowsService {
           generatedCount: response.questions.length,
           actualTokens:
             response.usage.inputTokens + response.usage.outputTokens,
+          errorSummary: null,
+          errorMessage: null,
+          errorCode: null,
+          failedAt: null,
         },
       });
       this.providerFactory.recordSuccess();
@@ -1701,11 +1739,18 @@ export class AiWorkflowsService {
       );
     } catch (error) {
       const normalized = this.normalizeProviderError(error);
+      this.logger.error(
+        `AI generation job ${jobId} failed with ${normalized.code}: ${normalized.message}`,
+        error instanceof Error ? error.stack : String(error),
+      );
       await this.prisma.aiGenerationJob.update({
         where: { id: jobId },
         data: {
           status: AiGenerationJobStatus.FAILED,
           errorSummary: normalized.message,
+          errorMessage: normalized.message,
+          errorCode: normalized.code,
+          failedAt: new Date(),
         },
       });
       await this.prisma.aiProviderFailure.create({
@@ -1729,6 +1774,7 @@ export class AiWorkflowsService {
         normalized.message,
         { jobId, code: normalized.code },
       );
+      throw error;
     }
   }
 
