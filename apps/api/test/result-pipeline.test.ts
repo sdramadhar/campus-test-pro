@@ -17,6 +17,10 @@ function main(): void {
   assert(studentExamSource.includes("timeTakenSeconds"));
   assert(studentExamSource.includes("questionReview"));
   assert(studentExamSource.includes("violations"));
+  assert(studentExamSource.includes("studentVisibleResultWhere"));
+  assert(studentExamSource.includes("publishEligibleStudentResults"));
+  assert(studentExamSource.includes("ResultVisibility.AFTER_END"));
+  assert(studentExamSource.includes("ResultVisibility.SCHEDULED"));
 
   const analyticsSource = readFileSync(
     resolve("src/modules/analytics/analytics.service.ts"),
@@ -29,6 +33,8 @@ function main(): void {
   assert(analyticsSource.includes("submittedTime"));
   assert(analyticsSource.includes("proctoringViolationCounts"));
   assert(analyticsSource.includes("averageTimeSeconds"));
+  assert(analyticsSource.includes("studentVisibleResultWhere"));
+  assert(analyticsSource.includes("ResultVisibility.AFTER_END"));
 
   const controllerSource = readFileSync(
     resolve("src/modules/analytics/analytics.controller.ts"),

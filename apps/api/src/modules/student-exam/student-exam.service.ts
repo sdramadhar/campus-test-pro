@@ -86,7 +86,7 @@ export class StudentExamService {
             take: 1,
           },
           results: {
-            where: { studentId: user.id, isPublished: true },
+            where: this.studentVisibleResultWhere(user.id),
             take: 1,
           },
         },
@@ -123,7 +123,7 @@ export class StudentExamService {
           where: { studentId: user.id },
           orderBy: { attemptNumber: "desc" },
         },
-        results: { where: { studentId: user.id, isPublished: true }, take: 1 },
+        results: { where: this.studentVisibleResultWhere(user.id), take: 1 },
       },
     });
     if (!assessment) {
@@ -598,8 +598,9 @@ export class StudentExamService {
 
   async listStudentResults(user: AuthenticatedUser) {
     await this.requireStudent(user);
+    await this.publishEligibleStudentResults(user.id);
     const results = await this.prisma.result.findMany({
-      where: { studentId: user.id, isPublished: true },
+      where: this.studentVisibleResultWhere(user.id),
       include: {
         assessment: { include: { subject: true } },
         attempt: { include: { securityFlags: true } },
@@ -614,8 +615,9 @@ export class StudentExamService {
 
   async getStudentResult(user: AuthenticatedUser, resultId: string) {
     await this.requireStudent(user);
+    await this.publishEligibleStudentResults(user.id);
     const result = await this.prisma.result.findFirst({
-      where: { id: resultId, studentId: user.id, isPublished: true },
+      where: { id: resultId, ...this.studentVisibleResultWhere(user.id) },
       include: {
         sectionResults: true,
         attempt: {
@@ -770,7 +772,11 @@ export class StudentExamService {
       throw new NotFoundException("Result is not available.");
     }
     if (user.role === Role.STUDENT) {
-      if (result.studentId !== user.id || !result.isPublished) {
+      await this.publishEligibleStudentResults(user.id);
+      const visible = await this.prisma.result.count({
+        where: { attemptId, ...this.studentVisibleResultWhere(user.id) },
+      });
+      if (result.studentId !== user.id || !visible) {
         throw new ForbiddenException("Result is not available.");
       }
     } else {
@@ -865,10 +871,10 @@ export class StudentExamService {
             },
           }),
           this.prisma.result.count({
-            where: { studentId: user.id, isPublished: true },
+            where: this.studentVisibleResultWhere(user.id),
           }),
           this.prisma.result.aggregate({
-            where: { studentId: user.id, isPublished: true },
+            where: this.studentVisibleResultWhere(user.id),
             _avg: { percentage: true },
           }),
         ],
@@ -1167,6 +1173,8 @@ export class StudentExamService {
     const manualPending = await tx.manualReviewTask.count({
       where: { attemptId, status: { not: ManualReviewStatus.COMPLETED } },
     });
+    const resultVisibility = this.resultVisibilityState(attempt.assessment);
+    const autoPublish = manualPending === 0 && resultVisibility.visible;
     const resultData = {
       collegeId: attempt.collegeId,
       assessmentId: attempt.assessmentId,
@@ -1199,14 +1207,8 @@ export class StudentExamService {
         ),
       ),
       evaluationStatus: manualPending > 0 ? "PENDING_REVIEW" : "READY",
-      isPublished:
-        attempt.assessment.resultVisibility ===
-          ResultVisibility.AFTER_SUBMISSION && manualPending === 0,
-      publishedAt:
-        attempt.assessment.resultVisibility ===
-          ResultVisibility.AFTER_SUBMISSION && manualPending === 0
-          ? new Date()
-          : null,
+      isPublished: autoPublish,
+      publishedAt: autoPublish ? new Date() : null,
     };
     const result = await tx.result.upsert({
       where: { attemptId },
@@ -1571,6 +1573,85 @@ export class StudentExamService {
       errors.push("Assessment has no questions.");
     }
     return { eligible: errors.length === 0, errors };
+  }
+
+  private resultVisibilityState(assessment: {
+    resultVisibility: ResultVisibility;
+    resultPublishAt?: Date | null;
+    endAt?: Date | null;
+    closesAt?: Date | null;
+  }) {
+    const now = new Date();
+    if (assessment.resultVisibility === ResultVisibility.NEVER) {
+      return { visible: false, reason: "hidden" };
+    }
+    if (assessment.resultVisibility === ResultVisibility.AFTER_SUBMISSION) {
+      return { visible: true, reason: "after-submission" };
+    }
+    if (assessment.resultVisibility === ResultVisibility.SCHEDULED) {
+      return {
+        visible:
+          !assessment.resultPublishAt ||
+          assessment.resultPublishAt.getTime() <= now.getTime(),
+        reason: "scheduled",
+      };
+    }
+    const endsAt = assessment.endAt ?? assessment.closesAt;
+    return {
+      visible: !endsAt || endsAt.getTime() <= now.getTime(),
+      reason: "after-end",
+    };
+  }
+
+  private studentVisibleResultWhere(
+    studentId: string,
+  ): Prisma.ResultWhereInput {
+    const now = new Date();
+    return {
+      studentId,
+      evaluationStatus: { in: ["READY", "PUBLISHED"] },
+      OR: [
+        { isPublished: true },
+        {
+          assessment: {
+            resultVisibility: ResultVisibility.AFTER_SUBMISSION,
+          },
+        },
+        {
+          assessment: {
+            resultVisibility: ResultVisibility.AFTER_END,
+            OR: [
+              { endAt: null, closesAt: null },
+              { endAt: { lte: now } },
+              { closesAt: { lte: now } },
+            ],
+          },
+        },
+        {
+          assessment: {
+            resultVisibility: ResultVisibility.SCHEDULED,
+            OR: [{ resultPublishAt: null }, { resultPublishAt: { lte: now } }],
+          },
+        },
+      ],
+    };
+  }
+
+  private async publishEligibleStudentResults(studentId: string) {
+    const eligible = await this.prisma.result.findMany({
+      where: {
+        ...this.studentVisibleResultWhere(studentId),
+        isPublished: false,
+      },
+      select: { id: true },
+    });
+    if (!eligible.length) {
+      return;
+    }
+    await this.prisma.result.updateMany({
+      where: { id: { in: eligible.map((result) => result.id) } },
+      data: { isPublished: true, publishedAt: new Date() },
+    });
   }
 
   private studentAttemptPayload(

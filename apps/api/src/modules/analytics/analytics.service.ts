@@ -13,6 +13,7 @@ import {
   QuestionDifficulty,
   ReportJobStatus,
   ReportOutputFormat,
+  ResultVisibility,
   Role,
   TestAttemptStatus,
 } from "../../../generated/phase5-client";
@@ -1106,7 +1107,7 @@ export class AnalyticsService {
   ) {
     if (!self) await this.ensureStudentVisible(user, studentUserId);
     const results = await this.resultValues(
-      { studentId: studentUserId, isPublished: true },
+      this.studentVisibleResultWhere(studentUserId),
       this.dateRange(query),
     );
     const stats = this.scoreStats(results);
@@ -1618,6 +1619,36 @@ export class AnalyticsService {
       : {};
   }
 
+  private studentVisibleResultWhere(
+    studentId: string,
+  ): Prisma.ResultWhereInput {
+    const now = new Date();
+    return {
+      studentId,
+      evaluationStatus: { in: ["READY", "PUBLISHED"] },
+      OR: [
+        { isPublished: true },
+        { assessment: { resultVisibility: ResultVisibility.AFTER_SUBMISSION } },
+        {
+          assessment: {
+            resultVisibility: ResultVisibility.AFTER_END,
+            OR: [
+              { endAt: null, closesAt: null },
+              { endAt: { lte: now } },
+              { closesAt: { lte: now } },
+            ],
+          },
+        },
+        {
+          assessment: {
+            resultVisibility: ResultVisibility.SCHEDULED,
+            OR: [{ resultPublishAt: null }, { resultPublishAt: { lte: now } }],
+          },
+        },
+      ],
+    };
+  }
+
   private rangeMeta(range: DateRange) {
     return {
       from: range.from?.toISOString() ?? null,
@@ -1763,7 +1794,7 @@ export class AnalyticsService {
 
   private async studentSubjectScores(studentId: string) {
     const rows = await this.prisma.result.findMany({
-      where: { studentId, isPublished: true },
+      where: this.studentVisibleResultWhere(studentId),
       include: { assessment: { include: { subject: true } } },
       take: 100,
     });
@@ -1775,7 +1806,12 @@ export class AnalyticsService {
 
   private async studentTopicScores(studentId: string) {
     const answers = await this.prisma.attemptQuestion.findMany({
-      where: { attempt: { studentId, result: { isPublished: true } } },
+      where: {
+        attempt: {
+          studentId,
+          result: this.studentVisibleResultWhere(studentId),
+        },
+      },
       include: {
         assessmentQuestion: { include: { question: true } },
         evaluations: true,
