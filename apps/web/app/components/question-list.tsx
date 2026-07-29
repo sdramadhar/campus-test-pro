@@ -70,6 +70,13 @@ export function QuestionList() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const toast = window.sessionStorage.getItem("campustest-question-toast");
+    if (!toast) return;
+    window.sessionStorage.removeItem("campustest-question-toast");
+    setMessage(toast);
+  }, []);
+
   async function updateStatus(id: string, next: string): Promise<void> {
     await academicRequest(`/api/v1/questions/${id}/status`, {
       method: "PATCH",
@@ -183,7 +190,11 @@ export function QuestionList() {
         </button>
       </section>
 
-      {state === "error" && <div className="form-alert">{message}</div>}
+      {message && (
+        <div className={state === "error" ? "form-alert" : "success-alert"}>
+          {message}
+        </div>
+      )}
       <section className="panel table-panel">
         <div className="table-summary">
           {state === "loading"

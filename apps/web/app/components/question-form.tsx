@@ -158,6 +158,10 @@ export function QuestionForm({ questionId }: { questionId?: string }) {
         },
       );
       window.localStorage.removeItem(storageKey);
+      window.sessionStorage.setItem(
+        "campustest-question-toast",
+        questionId ? "Question updated successfully." : "Question saved successfully.",
+      );
       router.push("/questions");
     } catch (error) {
       setMessage(

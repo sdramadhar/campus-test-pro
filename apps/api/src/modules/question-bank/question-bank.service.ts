@@ -197,38 +197,39 @@ export class QuestionBankService {
   }
 
   async createQuestion(user: TenantUser, dto: CreateQuestionDto) {
-    const collegeId = this.scopeCollege(user, dto.collegeId, true);
-    await this.ensureSubjectAccess(user, collegeId, dto.subjectId);
-    this.validateQuestion(dto, dto.status);
+    const payload = this.normalizeQuestionDto(dto);
+    const collegeId = this.scopeCollege(user, payload.collegeId, true);
+    await this.ensureSubjectAccess(user, collegeId, payload.subjectId);
+    this.validateQuestion(payload, payload.status);
 
     const question = await this.prisma.$transaction(async (tx) => {
       const created = await tx.question.create({
         data: {
           collegeId,
-          subjectId: dto.subjectId,
-          topic: dto.topic.trim(),
-          title: dto.title.trim(),
-          questionText: dto.questionText.trim(),
-          prompt: dto.questionText.trim(),
-          questionType: dto.questionType,
-          difficulty: dto.difficulty,
-          defaultMarks: dto.defaultMarks,
-          defaultNegativeMarks: dto.defaultNegativeMarks ?? 0,
-          points: Math.round(dto.defaultMarks),
-          explanation: this.optional(dto.explanation),
-          status: dto.status ?? QuestionStatus.DRAFT,
+          subjectId: payload.subjectId,
+          topic: payload.topic.trim(),
+          title: payload.title.trim(),
+          questionText: payload.questionText.trim(),
+          prompt: payload.questionText.trim(),
+          questionType: payload.questionType,
+          difficulty: payload.difficulty,
+          defaultMarks: payload.defaultMarks,
+          defaultNegativeMarks: payload.defaultNegativeMarks ?? 0,
+          points: Math.round(payload.defaultMarks),
+          explanation: this.optional(payload.explanation),
+          status: payload.status ?? QuestionStatus.DRAFT,
           createdById: user.id,
           updatedById: user.id,
-          language: dto.coding?.allowedLanguages[0],
-          metadata: this.metadata(dto),
-          options: { create: this.optionCreates(dto) },
-          codingQuestion: dto.coding
-            ? { create: this.codingCreate(dto) }
+          language: payload.coding?.allowedLanguages[0],
+          metadata: this.metadata(payload),
+          options: { create: this.optionCreates(payload) },
+          codingQuestion: payload.coding
+            ? { create: this.codingCreate(payload) }
             : undefined,
         },
         include: questionInclude,
       });
-      await this.syncTags(tx, created.id, collegeId, dto.tags ?? []);
+      await this.syncTags(tx, created.id, collegeId, payload.tags ?? []);
       await tx.auditLog.create({
         data: {
           event: AuditEvent.QUESTION_CREATE,
@@ -247,13 +248,14 @@ export class QuestionBankService {
   }
 
   async updateQuestion(user: TenantUser, id: string, dto: UpdateQuestionDto) {
+    const payload = this.normalizeQuestionDto(dto);
     const existing = await this.findQuestion(user, id);
     await this.ensureSubjectAccess(
       user,
       existing.collegeId ?? "",
-      dto.subjectId,
+      payload.subjectId,
     );
-    this.validateQuestion(dto, dto.status ?? existing.status);
+    this.validateQuestion(payload, payload.status ?? existing.status);
 
     const question = await this.prisma.$transaction(async (tx) => {
       await tx.questionOption.deleteMany({
@@ -265,25 +267,25 @@ export class QuestionBankService {
       const updated = await tx.question.update({
         where: { id: existing.id },
         data: {
-          subjectId: dto.subjectId,
-          topic: dto.topic.trim(),
-          title: dto.title.trim(),
-          questionText: dto.questionText.trim(),
-          prompt: dto.questionText.trim(),
-          questionType: dto.questionType,
-          difficulty: dto.difficulty,
-          defaultMarks: dto.defaultMarks,
-          defaultNegativeMarks: dto.defaultNegativeMarks ?? 0,
-          points: Math.round(dto.defaultMarks),
-          explanation: this.optional(dto.explanation),
-          status: dto.status ?? existing.status,
+          subjectId: payload.subjectId,
+          topic: payload.topic.trim(),
+          title: payload.title.trim(),
+          questionText: payload.questionText.trim(),
+          prompt: payload.questionText.trim(),
+          questionType: payload.questionType,
+          difficulty: payload.difficulty,
+          defaultMarks: payload.defaultMarks,
+          defaultNegativeMarks: payload.defaultNegativeMarks ?? 0,
+          points: Math.round(payload.defaultMarks),
+          explanation: this.optional(payload.explanation),
+          status: payload.status ?? existing.status,
           updatedById: user.id,
           version: { increment: 1 },
-          language: dto.coding?.allowedLanguages[0] ?? null,
-          metadata: this.metadata(dto),
-          options: { create: this.optionCreates(dto) },
-          codingQuestion: dto.coding
-            ? { create: this.codingCreate(dto) }
+          language: payload.coding?.allowedLanguages[0] ?? null,
+          metadata: this.metadata(payload),
+          options: { create: this.optionCreates(payload) },
+          codingQuestion: payload.coding
+            ? { create: this.codingCreate(payload) }
             : undefined,
         },
         include: questionInclude,
@@ -292,7 +294,7 @@ export class QuestionBankService {
         tx,
         updated.id,
         existing.collegeId ?? "",
-        dto.tags ?? [],
+        payload.tags ?? [],
       );
       await tx.auditLog.create({
         data: {
@@ -1017,6 +1019,27 @@ export class QuestionBankService {
         "Coding questions require at least one test case.",
       );
     }
+  }
+
+  private normalizeQuestionDto(
+    dto: CreateQuestionDto,
+  ): CreateQuestionDto & { questionType: QuestionType; defaultMarks: number } {
+    const questionType = dto.questionType ?? dto.type;
+    const defaultMarks = dto.defaultMarks ?? dto.marks;
+    const defaultNegativeMarks = dto.defaultNegativeMarks ?? dto.negativeMarks;
+    if (!questionType) {
+      throw new BadRequestException("Question type is required.");
+    }
+    if (defaultMarks === undefined || Number.isNaN(defaultMarks)) {
+      throw new BadRequestException("Question marks are required.");
+    }
+    dto.questionType = questionType;
+    dto.defaultMarks = defaultMarks;
+    dto.defaultNegativeMarks = defaultNegativeMarks;
+    return dto as CreateQuestionDto & {
+      questionType: QuestionType;
+      defaultMarks: number;
+    };
   }
 
   private validateQuestionFromRecord(

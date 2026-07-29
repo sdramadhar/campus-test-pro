@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -126,6 +126,7 @@ export class QuestionOptionDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
   @IsBoolean()
   isCorrect?: boolean;
 
@@ -201,6 +202,7 @@ export class CodingQuestionDto {
   @ApiProperty({ type: [TestCaseDto] })
   @IsArray()
   @ValidateNested({ each: true })
+  @Type(() => TestCaseDto)
   testCases!: TestCaseDto[];
 }
 
@@ -227,18 +229,32 @@ export class CreateQuestionDto {
   questionText!: string;
 
   @ApiProperty({ enum: QuestionType })
+  @IsOptional()
   @IsEnum(QuestionType)
-  questionType!: QuestionType;
+  questionType?: QuestionType;
+
+  @ApiPropertyOptional({ enum: QuestionType })
+  @IsOptional()
+  @IsEnum(QuestionType)
+  type?: QuestionType;
 
   @ApiProperty({ enum: QuestionDifficulty })
   @IsEnum(QuestionDifficulty)
   difficulty!: QuestionDifficulty;
 
   @ApiProperty()
+  @IsOptional()
   @Transform(({ value }) => Number(value))
   @IsNumber()
   @Min(0)
-  defaultMarks!: number;
+  defaultMarks?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  marks?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -246,6 +262,13 @@ export class CreateQuestionDto {
   @IsNumber()
   @Min(0)
   defaultNegativeMarks?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  negativeMarks?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -261,6 +284,7 @@ export class CreateQuestionDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
+  @Type(() => QuestionOptionDto)
   options?: QuestionOptionDto[];
 
   @ApiPropertyOptional({ type: [String] })
@@ -276,6 +300,7 @@ export class CreateQuestionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @ValidateNested()
+  @Type(() => CodingQuestionDto)
   coding?: CodingQuestionDto;
 }
 
