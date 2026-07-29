@@ -144,6 +144,14 @@ export class GenerateQuestionsDto {
   @IsOptional()
   @IsString()
   model?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Client-generated key used to make authentication retries safe for this generation request.",
+  })
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }
 
 export class BatchGenerateQuestionsDto extends GenerateQuestionsDto {

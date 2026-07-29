@@ -62,13 +62,14 @@ export function AiGeneratePanel() {
       model: formText(form, "model") || undefined,
       temperature: Number(formText(form, "temperature") || 0.2),
       maxTokens: Number(formText(form, "maxTokens") || 1200),
+      idempotencyKey: createGenerationIdempotencyKey(),
     };
     try {
-      const response = await aiRequest<ApiResponse<EntityRecord>>(
+      await aiRequest<ApiResponse<EntityRecord>>(
         "/api/v1/ai/questions/generate",
         toJsonBody(payload),
       );
-      setMessage(`Generation job queued: ${response.data.id}`);
+      setMessage("Generation job queued.");
       setState("idle");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to generate questions.");
@@ -190,4 +191,8 @@ export function AiGeneratePanel() {
       {message && <div className={state === "error" ? "form-alert" : "status ok"}>{message}</div>}
     </section>
   );
+}
+
+function createGenerationIdempotencyKey(): string {
+  return `ai-generate-${crypto.randomUUID()}`;
 }

@@ -11,6 +11,8 @@ function main(): void {
   assert(panelSource.includes("configurationMessage"));
   assert(panelSource.includes("status?.configurationMessage"));
   assert(!panelSource.includes('"AI features are disabled."'));
+  assert(panelSource.includes("idempotencyKey: createGenerationIdempotencyKey()"));
+  assert(panelSource.includes('setMessage("Generation job queued.")'));
 
   console.log("AI generate panel configuration tests passed.");
 }

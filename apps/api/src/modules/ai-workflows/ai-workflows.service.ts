@@ -120,6 +120,28 @@ export class AiWorkflowsService {
       }
     }
 
+    const idempotencyKey = this.optional(dto.idempotencyKey);
+    if (idempotencyKey) {
+      const existingJob = await this.prisma.aiGenerationJob.findFirst({
+        where: {
+          collegeId,
+          requestedById: user.id,
+          request: {
+            is: {
+              promptVariables: {
+                path: ["idempotencyKey"],
+                equals: idempotencyKey,
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (existingJob) {
+        return { success: true, data: await this.getJobData(user, existingJob.id) };
+      }
+    }
+
     const provider = this.providerFactory.getProvider();
     const promptTemplate = dto.promptTemplateId
       ? await this.prisma.aiPromptTemplate.findFirst({
@@ -166,6 +188,9 @@ export class AiWorkflowsService {
             outputStyle: this.optional(dto.outputStyle),
             avoidDuplicate: dto.avoidDuplicate ?? true,
             promptTemplateId: dto.promptTemplateId,
+            promptVariables: idempotencyKey
+              ? this.jsonValue({ idempotencyKey })
+              : undefined,
             promptPreview,
             sanitizedPromptHash: this.hash(promptPreview),
             runtimeModel,

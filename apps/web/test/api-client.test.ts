@@ -11,10 +11,16 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function installFetch(responses: Response[]): RequestInit[] {
-  const calls: RequestInit[] = [];
+type FetchCall = { input: RequestInfo | URL; init: RequestInit };
+
+function inputUrl(input: RequestInfo | URL): string {
+  return typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+}
+
+function installFetch(responses: Response[]): FetchCall[] {
+  const calls: FetchCall[] = [];
   globalThis.fetch = (_input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push(init ?? {});
+    calls.push({ input: _input, init: init ?? {} });
     const response = responses.shift();
     assert(response, "Unexpected fetch call.");
     return Promise.resolve(response);
@@ -32,12 +38,12 @@ async function main(): Promise<void> {
     authenticatedFetch("/api/v1/students/template"),
     authenticatedFetch("/api/v1/students/template"),
   ]);
-  assert.equal(calls[0]?.credentials, "include");
-  assert.equal(calls[1]?.credentials, "include");
+  assert.equal(calls[0]?.init.credentials, "include");
+  assert.equal(calls[1]?.init.credentials, "include");
 
   calls = installFetch([jsonResponse({ ok: true })]);
   await authenticatedFetch("/api/v1/students/export");
-  assert.equal(calls[0]?.credentials, "include");
+  assert.equal(calls[0]?.init.credentials, "include");
 
   calls = installFetch([
     jsonResponse({ message: "Authentication required" }, { status: 401 }),
@@ -47,8 +53,50 @@ async function main(): Promise<void> {
   const retried = await authenticatedFetch("/api/v1/students/template");
   assert.equal(retried.ok, true);
   assert.equal(calls.length, 3);
-  assert.equal(calls[1]?.credentials, "include");
-  assert.equal(calls[2]?.credentials, "include");
+  assert.equal(calls[1]?.init.credentials, "include");
+  assert.equal(calls[2]?.init.credentials, "include");
+  assert.equal(inputUrl(calls[1].input), "https://campus-test-pro.onrender.com/api/v1/auth/refresh");
+
+  calls = installFetch([
+    jsonResponse({ success: true, data: { id: "ai-job-1" } }, { status: 201 }),
+  ]);
+  const aiBody = JSON.stringify({
+    subjectId: "subject-1",
+    topic: "Python",
+    idempotencyKey: "ai-generate-test-key",
+  });
+  await authenticatedFetch("/api/v1/ai/questions/generate", {
+    method: "POST",
+    body: aiBody,
+  });
+  assert.equal(calls.length, 1);
+  const validAiCall = calls[0];
+  assert(validAiCall);
+  assert.equal(validAiCall.init.credentials, "include");
+  assert.equal(validAiCall.init.body, aiBody);
+
+  calls = installFetch([
+    jsonResponse({ message: "Authentication required" }, { status: 401 }),
+    jsonResponse({ accessToken: "rotated" }),
+    jsonResponse({ success: true, data: { id: "ai-job-1" } }, { status: 201 }),
+  ]);
+  await authenticatedFetch("/api/v1/ai/questions/generate", {
+    method: "POST",
+    body: aiBody,
+  });
+  assert.equal(calls.length, 3);
+  assert.equal(
+    calls.filter((call) =>
+      inputUrl(call.input).endsWith("/api/v1/auth/refresh"),
+    ).length,
+    1,
+  );
+  const generateCalls = calls.filter((call) =>
+    inputUrl(call.input).endsWith("/api/v1/ai/questions/generate"),
+  );
+  assert.equal(generateCalls.length, 2);
+  assert.equal(generateCalls[0]?.init.body, aiBody);
+  assert.equal(generateCalls[1]?.init.body, aiBody);
 
   const originalWindow = globalThis.window;
   let redirectedTo = "";
