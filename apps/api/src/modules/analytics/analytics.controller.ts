@@ -40,48 +40,71 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("api/v1")
 export class AnalyticsController {
-  constructor(@Inject(AnalyticsService) private readonly analytics: AnalyticsService) {}
+  constructor(
+    @Inject(AnalyticsService) private readonly analytics: AnalyticsService,
+  ) {}
 
   @Get("analytics/platform")
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: "Return platform-wide aggregate analytics." })
-  platform(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  platform(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.platform(user, query);
   }
 
   @Get("analytics/colleges")
   @Roles(Role.SUPER_ADMIN)
-  colleges(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  colleges(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.colleges(user, query);
   }
 
   @Get("analytics/college")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN)
-  college(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  college(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.college(user, query);
   }
 
   @Get("analytics/departments")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
-  departments(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  departments(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.departmentAnalytics(user, query);
   }
 
   @Get("analytics/batches")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
-  batches(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  batches(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.batchAnalytics(user, query);
   }
 
   @Get("analytics/faculty")
   @Roles(Role.FACULTY, Role.COLLEGE_ADMIN, Role.SUPER_ADMIN)
-  faculty(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  faculty(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.faculty(user, query);
   }
 
   @Get("analytics/student")
   @Roles(Role.STUDENT)
-  student(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  student(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.studentSelf(user, query);
   }
 
@@ -135,13 +158,19 @@ export class AnalyticsController {
 
   @Get("analytics/subjects")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY, Role.STUDENT)
-  subjects(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  subjects(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.subjects(user, query);
   }
 
   @Get("analytics/topics")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY, Role.STUDENT)
-  topics(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  topics(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.topics(user, query);
   }
 
@@ -153,7 +182,10 @@ export class AnalyticsController {
 
   @Post("analytics/compare")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY, Role.STUDENT)
-  compare(@CurrentUser() user: AuthenticatedUser, @Body() dto: CompareAnalyticsDto) {
+  compare(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CompareAnalyticsDto,
+  ) {
     return this.analytics.compare(user, dto);
   }
 
@@ -161,6 +193,25 @@ export class AnalyticsController {
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
   reports(@CurrentUser() user: AuthenticatedUser) {
     return this.analytics.reports(user);
+  }
+
+  @Get("reports/results")
+  @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
+  resultReports(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
+    return this.analytics.resultReports(user, query);
+  }
+
+  @Get("reports/results/export.csv")
+  @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  resultReportsCsv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
+    return this.analytics.resultReportsCsv(user, query);
   }
 
   @Post("reports")
@@ -190,7 +241,10 @@ export class AnalyticsController {
 
   @Delete("reports/:id")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
-  deleteReport(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  deleteReport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ) {
     return this.analytics.deleteReport(user, id);
   }
 
@@ -228,7 +282,10 @@ export class AnalyticsController {
 
   @Post("report-jobs/:jobId/cancel")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
-  cancelJob(@CurrentUser() user: AuthenticatedUser, @Param("jobId") jobId: string) {
+  cancelJob(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("jobId") jobId: string,
+  ) {
     return this.analytics.cancelReportJob(user, jobId);
   }
 
@@ -246,13 +303,19 @@ export class AnalyticsController {
 
   @Get("analytics/insights")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
-  insights(@CurrentUser() user: AuthenticatedUser, @Query() query: AnalyticsQueryDto) {
+  insights(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.insights(user, query);
   }
 
   @Post("analytics/insights/generate")
   @Roles(Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY)
-  generateInsights(@CurrentUser() user: AuthenticatedUser, @Body() query: AnalyticsQueryDto) {
+  generateInsights(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() query: AnalyticsQueryDto,
+  ) {
     return this.analytics.generateInsights(user, query);
   }
 

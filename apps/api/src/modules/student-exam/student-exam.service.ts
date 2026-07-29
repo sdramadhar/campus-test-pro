@@ -600,7 +600,10 @@ export class StudentExamService {
     await this.requireStudent(user);
     const results = await this.prisma.result.findMany({
       where: { studentId: user.id, isPublished: true },
-      include: { assessment: { include: { subject: true } } },
+      include: {
+        assessment: { include: { subject: true } },
+        attempt: { include: { securityFlags: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
     return {
@@ -615,6 +618,15 @@ export class StudentExamService {
       where: { id: resultId, studentId: user.id, isPublished: true },
       include: {
         sectionResults: true,
+        attempt: {
+          include: {
+            securityFlags: true,
+            questions: {
+              orderBy: { displayOrder: "asc" },
+              include: { answer: true, evaluations: true },
+            },
+          },
+        },
         assessment: { include: { subject: true } },
       },
     });
@@ -718,7 +730,16 @@ export class StudentExamService {
     await this.ensureAssessmentManagementAccess(user, assessmentId);
     const results = await this.prisma.result.findMany({
       where: { assessmentId },
-      include: { sectionResults: true },
+      include: {
+        sectionResults: true,
+        assessment: { include: { subject: true } },
+        attempt: {
+          include: {
+            student: { include: { studentProfile: true } },
+            securityFlags: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
     return {
@@ -730,7 +751,20 @@ export class StudentExamService {
   async attemptResult(user: AuthenticatedUser, attemptId: string) {
     const result = await this.prisma.result.findUnique({
       where: { attemptId },
-      include: { sectionResults: true, assessment: true },
+      include: {
+        sectionResults: true,
+        assessment: { include: { subject: true } },
+        attempt: {
+          include: {
+            student: { include: { studentProfile: true } },
+            securityFlags: true,
+            questions: {
+              orderBy: { displayOrder: "asc" },
+              include: { answer: true, evaluations: true },
+            },
+          },
+        },
+      },
     });
     if (!result) {
       throw new NotFoundException("Result is not available.");
@@ -1133,45 +1167,51 @@ export class StudentExamService {
     const manualPending = await tx.manualReviewTask.count({
       where: { attemptId, status: { not: ManualReviewStatus.COMPLETED } },
     });
+    const resultData = {
+      collegeId: attempt.collegeId,
+      assessmentId: attempt.assessmentId,
+      attemptId,
+      studentId: attempt.studentId,
+      objectiveScore,
+      totalScore: objectiveScore,
+      percentage: this.percentage(
+        objectiveScore,
+        attempt.assessment.totalMarks,
+      ),
+      passStatus: this.passStatus(
+        objectiveScore,
+        attempt.assessment.passingMarks,
+      ),
+      correctCount,
+      incorrectCount,
+      unansweredCount,
+      attemptedCount,
+      timeTakenSeconds: Math.max(
+        0,
+        Math.floor(
+          ((
+            attempt.submittedAt ??
+            attempt.autoSubmittedAt ??
+            new Date()
+          ).getTime() -
+            attempt.startedAt.getTime()) /
+            1000,
+        ),
+      ),
+      evaluationStatus: manualPending > 0 ? "PENDING_REVIEW" : "READY",
+      isPublished:
+        attempt.assessment.resultVisibility ===
+          ResultVisibility.AFTER_SUBMISSION && manualPending === 0,
+      publishedAt:
+        attempt.assessment.resultVisibility ===
+          ResultVisibility.AFTER_SUBMISSION && manualPending === 0
+          ? new Date()
+          : null,
+    };
     const result = await tx.result.upsert({
       where: { attemptId },
-      update: {},
-      create: {
-        collegeId: attempt.collegeId,
-        assessmentId: attempt.assessmentId,
-        attemptId,
-        studentId: attempt.studentId,
-        objectiveScore,
-        totalScore: objectiveScore,
-        percentage: this.percentage(
-          objectiveScore,
-          attempt.assessment.totalMarks,
-        ),
-        passStatus: this.passStatus(
-          objectiveScore,
-          attempt.assessment.passingMarks,
-        ),
-        correctCount,
-        incorrectCount,
-        unansweredCount,
-        attemptedCount,
-        timeTakenSeconds: Math.max(
-          0,
-          Math.floor(
-            ((
-              attempt.submittedAt ??
-              attempt.autoSubmittedAt ??
-              new Date()
-            ).getTime() -
-              attempt.startedAt.getTime()) /
-              1000,
-          ),
-        ),
-        evaluationStatus: manualPending > 0 ? "PENDING_REVIEW" : "READY",
-        isPublished:
-          attempt.assessment.resultVisibility ===
-            ResultVisibility.AFTER_SUBMISSION && manualPending === 0,
-      },
+      update: resultData,
+      create: resultData,
     });
     await tx.sectionResult.deleteMany({ where: { resultId: result.id } });
     for (const [sectionId, section] of sectionTotals.entries()) {
@@ -1614,14 +1654,61 @@ export class StudentExamService {
     evaluationStatus: string;
     isPublished: boolean;
     publishedAt: Date | null;
-    assessment?: { title: string; subject?: unknown };
+    assessment?: {
+      title: string;
+      subject?: unknown;
+      resultVisibility?: ResultVisibility;
+    };
     sectionResults?: unknown[];
+    attempt?: {
+      startedAt?: Date;
+      submittedAt?: Date | null;
+      autoSubmittedAt?: Date | null;
+      status?: TestAttemptStatus;
+      securityFlags?: unknown[];
+      student?: {
+        name: string;
+        email: string;
+        studentId: string | null;
+        studentProfile?: { rollNumber: string } | null;
+      };
+      questions?: Array<{
+        id: string;
+        displayOrder: number;
+        questionType: QuestionType;
+        questionTextSnapshot: string;
+        assignedMarks: number;
+        answer?: {
+          selectedOptionKeys: string[];
+          textAnswer: string | null;
+          numericalAnswer: Prisma.Decimal | null;
+          markedForReview: boolean;
+        } | null;
+        evaluations?: Array<{
+          isCorrect: boolean | null;
+          awardedMarks: number;
+          maxMarks: number;
+          negativeMarksApplied: number;
+        }>;
+      }>;
+    };
   }) {
+    const submittedAt =
+      result.attempt?.submittedAt ?? result.attempt?.autoSubmittedAt ?? null;
     return {
       id: result.id,
       assessmentId: result.assessmentId,
       attemptId: result.attemptId,
       assessment: result.assessment,
+      student: result.attempt?.student
+        ? {
+            name: result.attempt.student.name,
+            email: result.attempt.student.email,
+            studentId: result.attempt.student.studentId,
+            rollNumber:
+              result.attempt.student.studentProfile?.rollNumber ?? null,
+          }
+        : undefined,
       objectiveScore: result.objectiveScore,
       descriptiveScore: result.descriptiveScore,
       codingScore: result.codingScore,
@@ -1633,10 +1720,39 @@ export class StudentExamService {
       unansweredCount: result.unansweredCount,
       attemptedCount: result.attemptedCount,
       timeTakenSeconds: result.timeTakenSeconds,
+      submittedAt,
+      durationSeconds: result.timeTakenSeconds,
+      violations: result.attempt?.securityFlags?.length ?? 0,
+      attemptStatus: result.attempt?.status,
       evaluationStatus: result.evaluationStatus,
       isPublished: result.isPublished,
       publishedAt: result.publishedAt,
       sectionResults: result.sectionResults ?? [],
+      questionReview:
+        result.isPublished &&
+        result.assessment?.resultVisibility !== ResultVisibility.NEVER
+          ? (result.attempt?.questions ?? []).map((question) => ({
+              id: question.id,
+              displayOrder: question.displayOrder,
+              questionType: question.questionType,
+              questionText: question.questionTextSnapshot,
+              assignedMarks: question.assignedMarks,
+              selectedOptionKeys: question.answer?.selectedOptionKeys ?? [],
+              textAnswer: question.answer?.textAnswer ?? null,
+              numericalAnswer:
+                question.answer?.numericalAnswer === null ||
+                question.answer?.numericalAnswer === undefined
+                  ? null
+                  : Number(question.answer.numericalAnswer),
+              markedForReview: question.answer?.markedForReview ?? false,
+              isCorrect: question.evaluations?.[0]?.isCorrect ?? null,
+              awardedMarks: question.evaluations?.[0]?.awardedMarks ?? null,
+              maxMarks:
+                question.evaluations?.[0]?.maxMarks ?? question.assignedMarks,
+              negativeMarksApplied:
+                question.evaluations?.[0]?.negativeMarksApplied ?? 0,
+            }))
+          : [],
     };
   }
 

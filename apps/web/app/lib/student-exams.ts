@@ -81,6 +81,11 @@ export interface StudentResult {
   assessmentId: string;
   attemptId: string;
   assessment?: { title: string };
+  student?: {
+    name: string;
+    rollNumber?: string | null;
+    studentId?: string | null;
+  };
   objectiveScore: number;
   descriptiveScore: number;
   codingScore: number;
@@ -91,12 +96,30 @@ export interface StudentResult {
   incorrectCount: number;
   unansweredCount: number;
   attemptedCount: number;
+  timeTakenSeconds?: number | null;
+  submittedAt?: string | null;
+  violations?: number;
   evaluationStatus: string;
   publishedAt?: string | null;
   sectionResults?: Array<{
     sectionName: string;
     totalMarks: number;
     awardedMarks: number;
+  }>;
+  questionReview?: Array<{
+    id: string;
+    displayOrder: number;
+    questionType: string;
+    questionText: string;
+    assignedMarks: number;
+    selectedOptionKeys: string[];
+    textAnswer?: string | null;
+    numericalAnswer?: number | null;
+    markedForReview: boolean;
+    isCorrect?: boolean | null;
+    awardedMarks?: number | null;
+    maxMarks?: number;
+    negativeMarksApplied?: number;
   }>;
 }
 

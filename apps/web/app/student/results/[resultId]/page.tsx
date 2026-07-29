@@ -49,14 +49,24 @@ export default function StudentResultDetailPage({
               <span>Evaluation</span>
               <strong>{result.evaluationStatus}</strong>
             </article>
+            <article>
+              <span>Time Taken</span>
+              <strong>{formatDuration(result.timeTakenSeconds ?? null)}</strong>
+            </article>
+            <article>
+              <span>Violations</span>
+              <strong>{result.violations ?? 0}</strong>
+            </article>
           </section>
           <section className="panel">
             <div className="panel-header">
               <h2>Score Breakdown</h2>
               <span>
-                {result.publishedAt
-                  ? new Date(result.publishedAt).toLocaleString()
-                  : "Published"}
+                {result.submittedAt
+                  ? `Submitted ${new Date(result.submittedAt).toLocaleString()}`
+                  : result.publishedAt
+                    ? `Published ${new Date(result.publishedAt).toLocaleString()}`
+                    : "Published"}
               </span>
             </div>
             <div className="detail-grid">
@@ -106,8 +116,41 @@ export default function StudentResultDetailPage({
               ))}
             </div>
           </section>
+          {(result.questionReview ?? []).length > 0 && (
+            <section className="panel">
+              <div className="panel-header">
+                <h2>Question Review</h2>
+                <span>Published review summary</span>
+              </div>
+              <div className="activity-list">
+                {(result.questionReview ?? []).map((question) => (
+                  <div key={question.id}>
+                    <span>
+                      {question.displayOrder}. {question.questionText}
+                    </span>
+                    <strong>
+                      {question.awardedMarks ?? "-"} /{" "}
+                      {question.maxMarks ?? question.assignedMarks}
+                      {question.isCorrect === true
+                        ? " Correct"
+                        : question.isCorrect === false
+                          ? " Wrong"
+                          : ""}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
     </AuthShell>
   );
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return "-";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }

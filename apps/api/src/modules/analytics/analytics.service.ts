@@ -39,7 +39,11 @@ const maxReportRows = 5000;
 const minStatsSample = 5;
 
 type DateRange = { from?: Date; to?: Date; label: string };
-type NumericResult = { percentage: number; totalScore: number; timeTakenSeconds: number | null };
+type NumericResult = {
+  percentage: number;
+  totalScore: number;
+  timeTakenSeconds: number | null;
+};
 
 @Injectable()
 export class AnalyticsService {
@@ -73,26 +77,60 @@ export class AnalyticsService {
         workerHealth,
       ] = await Promise.all([
         this.prisma.college.count({ where: { deletedAt: null } }),
-        this.prisma.college.count({ where: { deletedAt: null, isActive: true } }),
+        this.prisma.college.count({
+          where: { deletedAt: null, isActive: true },
+        }),
         this.prisma.user.count({ where: dateWhere }),
         this.prisma.user.count({ where: { role: Role.STUDENT, ...dateWhere } }),
         this.prisma.user.count({ where: { role: Role.FACULTY, ...dateWhere } }),
-        this.prisma.user.count({ where: { role: Role.COLLEGE_ADMIN, ...dateWhere } }),
-        this.prisma.assessment.count({ where: { deletedAt: null, ...dateWhere } }),
-        this.prisma.assessment.count({
-          where: { deletedAt: null, status: AssessmentStatus.ACTIVE, ...dateWhere },
+        this.prisma.user.count({
+          where: { role: Role.COLLEGE_ADMIN, ...dateWhere },
         }),
         this.prisma.assessment.count({
-          where: { deletedAt: null, status: { in: [AssessmentStatus.COMPLETED, AssessmentStatus.PUBLISHED, AssessmentStatus.CLOSED] }, ...dateWhere },
+          where: { deletedAt: null, ...dateWhere },
+        }),
+        this.prisma.assessment.count({
+          where: {
+            deletedAt: null,
+            status: AssessmentStatus.ACTIVE,
+            ...dateWhere,
+          },
+        }),
+        this.prisma.assessment.count({
+          where: {
+            deletedAt: null,
+            status: {
+              in: [
+                AssessmentStatus.COMPLETED,
+                AssessmentStatus.PUBLISHED,
+                AssessmentStatus.CLOSED,
+              ],
+            },
+            ...dateWhere,
+          },
         }),
         this.prisma.testAttempt.count({ where: this.startedRange(range) }),
-        this.prisma.testAttempt.count({ where: { status: { in: submittedStatuses }, ...this.startedRange(range) } }),
-        this.prisma.testAttempt.count({ where: { status: TestAttemptStatus.AUTO_SUBMITTED, ...this.startedRange(range) } }),
-        this.prisma.question.count({ where: { deletedAt: null, ...dateWhere } }),
+        this.prisma.testAttempt.count({
+          where: {
+            status: { in: submittedStatuses },
+            ...this.startedRange(range),
+          },
+        }),
+        this.prisma.testAttempt.count({
+          where: {
+            status: TestAttemptStatus.AUTO_SUBMITTED,
+            ...this.startedRange(range),
+          },
+        }),
+        this.prisma.question.count({
+          where: { deletedAt: null, ...dateWhere },
+        }),
         this.prisma.aiGenerationResult.count({ where: dateWhere }),
         this.prisma.extractedQuestionCandidate.count({ where: dateWhere }),
         this.queueHealth(),
-        this.prisma.workerHeartbeat.findMany({ orderBy: { lastSeenAt: "desc" }, take: 5 }).catch(() => []),
+        this.prisma.workerHeartbeat
+          .findMany({ orderBy: { lastSeenAt: "desc" }, take: 5 })
+          .catch(() => []),
       ]);
       return this.ok({
         range: this.rangeMeta(range),
@@ -112,7 +150,10 @@ export class AnalyticsService {
           autoSubmittedAttempts,
           totalQuestions,
           aiGeneratedQuestions,
-          manuallyCreatedQuestions: Math.max(totalQuestions - aiGeneratedQuestions - documentImportedQuestions, 0),
+          manuallyCreatedQuestions: Math.max(
+            totalQuestions - aiGeneratedQuestions - documentImportedQuestions,
+            0,
+          ),
           documentImportedQuestions,
         },
         health: {
@@ -122,7 +163,8 @@ export class AnalyticsService {
           database: "UP",
           redis: queueHealth.redis,
         },
-        privacy: "Platform analytics intentionally omits student-level details.",
+        privacy:
+          "Platform analytics intentionally omits student-level details.",
       });
     });
   }
@@ -134,7 +176,14 @@ export class AnalyticsService {
       where: { deletedAt: null },
       orderBy: { createdAt: "desc" },
       take: pageSize,
-      select: { id: true, name: true, collegeCode: true, isActive: true, status: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        collegeCode: true,
+        isActive: true,
+        status: true,
+        createdAt: true,
+      },
     });
     return this.ok({ data, meta: { pageSize } });
   }
@@ -171,20 +220,48 @@ export class AnalyticsService {
         this.prisma.course.count({ where }),
         this.prisma.subject.count({ where }),
         this.prisma.batch.count({ where }),
-        this.prisma.assessment.count({ where: { ...where, status: AssessmentStatus.ACTIVE } }),
-        this.prisma.assessment.count({ where: { ...where, status: AssessmentStatus.SCHEDULED } }),
-        this.prisma.assessment.count({ where: { ...where, status: { in: [AssessmentStatus.COMPLETED, AssessmentStatus.PUBLISHED, AssessmentStatus.CLOSED] } } }),
-        this.prisma.manualReviewTask.count({ where: { attempt: { collegeId }, status: { not: "COMPLETED" } } }),
+        this.prisma.assessment.count({
+          where: { ...where, status: AssessmentStatus.ACTIVE },
+        }),
+        this.prisma.assessment.count({
+          where: { ...where, status: AssessmentStatus.SCHEDULED },
+        }),
+        this.prisma.assessment.count({
+          where: {
+            ...where,
+            status: {
+              in: [
+                AssessmentStatus.COMPLETED,
+                AssessmentStatus.PUBLISHED,
+                AssessmentStatus.CLOSED,
+              ],
+            },
+          },
+        }),
+        this.prisma.manualReviewTask.count({
+          where: { attempt: { collegeId }, status: { not: "COMPLETED" } },
+        }),
         this.prisma.result.count({ where: { ...where, isPublished: true } }),
-        this.prisma.attemptSecurityFlag.count({ where: { attempt: { collegeId } } }),
+        this.prisma.attemptSecurityFlag.count({
+          where: { attempt: { collegeId } },
+        }),
         this.prisma.question.count({ where: { ...where, deletedAt: null } }),
-        this.prisma.aiUsageRecord.aggregate({ where, _sum: { inputTokens: true, outputTokens: true, actualCost: true }, _count: true }),
+        this.prisma.aiUsageRecord.aggregate({
+          where,
+          _sum: { inputTokens: true, outputTokens: true, actualCost: true },
+          _count: true,
+        }),
         this.prisma.documentImportJob.count({ where }),
-        this.prisma.testAttempt.findMany({ where: attemptWhere, select: { status: true } }),
+        this.prisma.testAttempt.findMany({
+          where: attemptWhere,
+          select: { status: true },
+        }),
         this.resultValues(where, range),
       ]);
       const totalAssigned = await this.assignedStudentCount(collegeId);
-      const submitted = attempts.filter((item) => submittedStatuses.includes(item.status)).length;
+      const submitted = attempts.filter((item) =>
+        submittedStatuses.includes(item.status),
+      ).length;
       const stats = this.scoreStats(results);
       return this.ok({
         range: this.rangeMeta(range),
@@ -225,7 +302,10 @@ export class AnalyticsService {
   async departmentAnalytics(user: AuthenticatedUser, query: AnalyticsQueryDto) {
     const collegeId = this.scopeCollege(user, query.collegeId);
     const departments = await this.prisma.department.findMany({
-      where: { ...this.tenantWhere(collegeId), ...(query.departmentId ? { id: query.departmentId } : {}) },
+      where: {
+        ...this.tenantWhere(collegeId),
+        ...(query.departmentId ? { id: query.departmentId } : {}),
+      },
       take: Math.min(query.pageSize ?? 50, 100),
       orderBy: { departmentName: "asc" },
       select: { id: true, departmentName: true, departmentCode: true },
@@ -234,9 +314,15 @@ export class AnalyticsService {
       data: await Promise.all(
         departments.map(async (department) => ({
           ...department,
-          students: await this.prisma.studentProfile.count({ where: { collegeId, departmentId: department.id } }),
-          faculty: await this.prisma.facultyProfile.count({ where: { collegeId, departmentId: department.id } }),
-          subjects: await this.prisma.subject.count({ where: { collegeId, departmentId: department.id } }),
+          students: await this.prisma.studentProfile.count({
+            where: { collegeId, departmentId: department.id },
+          }),
+          faculty: await this.prisma.facultyProfile.count({
+            where: { collegeId, departmentId: department.id },
+          }),
+          subjects: await this.prisma.subject.count({
+            where: { collegeId, departmentId: department.id },
+          }),
         })),
       ),
     });
@@ -254,8 +340,12 @@ export class AnalyticsService {
       data: await Promise.all(
         batches.map(async (batch) => ({
           ...batch,
-          students: await this.prisma.studentProfile.count({ where: { collegeId, batchId: batch.id } }),
-          assessments: await this.prisma.assessmentBatchAssignment.count({ where: { batchId: batch.id } }),
+          students: await this.prisma.studentProfile.count({
+            where: { collegeId, batchId: batch.id },
+          }),
+          assessments: await this.prisma.assessmentBatchAssignment.count({
+            where: { batchId: batch.id },
+          }),
         })),
       ),
     });
@@ -266,7 +356,9 @@ export class AnalyticsService {
     const subjectIds = await this.allowedSubjectIds(user, collegeId);
     const where: Prisma.ResultWhereInput = {
       collegeId,
-      ...(subjectIds.length ? { assessment: { subjectId: { in: subjectIds } } } : {}),
+      ...(subjectIds.length
+        ? { assessment: { subjectId: { in: subjectIds } } }
+        : {}),
     };
     const results = await this.resultValues(where, this.dateRange(query));
     return this.ok({
@@ -274,7 +366,10 @@ export class AnalyticsService {
       assignedBatches: await this.assignedBatchCount(user, collegeId),
       performance: this.scoreStats(results),
       charts: this.standardCharts(results, []),
-      questionWiseAccuracy: await this.questionAccuracy({ collegeId, subjectIds }),
+      questionWiseAccuracy: await this.questionAccuracy({
+        collegeId,
+        subjectIds,
+      }),
       topicPerformance: await this.topicPerformance(collegeId, subjectIds),
       timeAnalysis: this.timeStats(results),
     });
@@ -284,14 +379,25 @@ export class AnalyticsService {
     return this.studentByUserId(user, user.id, query, true);
   }
 
-  async studentById(user: AuthenticatedUser, studentId: string, query: AnalyticsQueryDto) {
-    const profile = await this.prisma.studentProfile.findUnique({ where: { id: studentId }, include: { user: true } });
+  async studentById(
+    user: AuthenticatedUser,
+    studentId: string,
+    query: AnalyticsQueryDto,
+  ) {
+    const profile = await this.prisma.studentProfile.findUnique({
+      where: { id: studentId },
+      include: { user: true },
+    });
     if (!profile) throw new NotFoundException("Student not found.");
     await this.ensureStudentVisible(user, profile.userId, profile.collegeId);
     return this.studentByUserId(user, profile.userId, query, false);
   }
 
-  async assessment(user: AuthenticatedUser, assessmentId: string, query: AnalyticsQueryDto) {
+  async assessment(
+    user: AuthenticatedUser,
+    assessmentId: string,
+    query: AnalyticsQueryDto,
+  ) {
     const assessment = await this.scopedAssessment(user, assessmentId);
     const range = this.dateRange(query);
     const results = await this.resultValues({ assessmentId }, range);
@@ -300,23 +406,36 @@ export class AnalyticsService {
       select: { status: true, totalDurationSeconds: true },
     });
     const assigned = await this.assessmentAssignedCount(assessmentId);
-    const submitted = attempts.filter((item) => submittedStatuses.includes(item.status)).length;
+    const submitted = attempts.filter((item) =>
+      submittedStatuses.includes(item.status),
+    ).length;
     const stats = this.scoreStats(results);
     return this.ok({
-      assessment: { id: assessment.id, title: assessment.title, status: assessment.status, totalMarks: assessment.totalMarks },
+      assessment: {
+        id: assessment.id,
+        title: assessment.title,
+        status: assessment.status,
+        totalMarks: assessment.totalMarks,
+      },
       range: this.rangeMeta(range),
       counts: {
         assignedStudents: assigned,
         eligibleStudents: assigned,
         startedAttempts: attempts.length,
         submittedAttempts: submitted,
-        autoSubmittedAttempts: attempts.filter((item) => item.status === TestAttemptStatus.AUTO_SUBMITTED).length,
+        autoSubmittedAttempts: attempts.filter(
+          (item) => item.status === TestAttemptStatus.AUTO_SUBMITTED,
+        ).length,
         absentStudents: Math.max(assigned - attempts.length, 0),
         pendingManualReviews: await this.prisma.manualReviewTask.count({
           where: { attempt: { assessmentId }, status: { not: "COMPLETED" } },
         }),
-        securityEvents: await this.prisma.attemptSecurityFlag.count({ where: { attempt: { assessmentId } } }),
-        publishedResults: await this.prisma.result.count({ where: { assessmentId, isPublished: true } }),
+        securityEvents: await this.prisma.attemptSecurityFlag.count({
+          where: { attempt: { assessmentId } },
+        }),
+        publishedResults: await this.prisma.result.count({
+          where: { assessmentId, isPublished: true },
+        }),
       },
       rates: {
         completionRate: this.percent(submitted, assigned),
@@ -325,10 +444,15 @@ export class AnalyticsService {
       scores: stats,
       charts: this.standardCharts(results, attempts),
       sections: await this.sectionSummary(assessmentId),
-      questions: await this.questionAccuracy({ collegeId: assessment.collegeId ?? undefined, assessmentId }),
+      questions: await this.questionAccuracy({
+        collegeId: assessment.collegeId ?? undefined,
+        assessmentId,
+      }),
       formulae: {
-        median: "Sort percentages ascending and use the center value; even sample sizes average the two center values.",
-        percentile: "Percentile rank = count of published scores below or equal to score divided by eligible published scores.",
+        median:
+          "Sort percentages ascending and use the center value; even sample sizes average the two center values.",
+        percentile:
+          "Percentile rank = count of published scores below or equal to score divided by eligible published scores.",
       },
     });
   }
@@ -336,7 +460,10 @@ export class AnalyticsService {
   async assessmentLeaderboard(user: AuthenticatedUser, assessmentId: string) {
     const assessment = await this.scopedAssessment(user, assessmentId, true);
     const enabled = assessment.resultVisibility !== "NEVER";
-    if (!enabled) throw new ForbiddenException("Leaderboard is disabled for this assessment.");
+    if (!enabled)
+      throw new ForbiddenException(
+        "Leaderboard is disabled for this assessment.",
+      );
     const where: Prisma.ResultWhereInput = {
       assessmentId,
       isPublished: true,
@@ -345,7 +472,11 @@ export class AnalyticsService {
     };
     const results = await this.prisma.result.findMany({
       where,
-      orderBy: [{ percentage: "desc" }, { timeTakenSeconds: "asc" }, { createdAt: "asc" }],
+      orderBy: [
+        { percentage: "desc" },
+        { timeTakenSeconds: "asc" },
+        { createdAt: "asc" },
+      ],
       take: 100,
       include: { attempt: { select: { submittedAt: true } } },
     });
@@ -357,7 +488,10 @@ export class AnalyticsService {
     const entries = results.map((result, index) => ({
       rank: index + 1,
       studentId: user.role === Role.STUDENT ? result.studentId : undefined,
-      displayName: user.role === Role.STUDENT ? (userNames.get(result.studentId) ?? "Student") : this.anonymousName(index + 1),
+      displayName:
+        user.role === Role.STUDENT
+          ? (userNames.get(result.studentId) ?? "Student")
+          : this.anonymousName(index + 1),
       percentage: result.percentage,
       totalScore: result.totalScore,
       timeTakenSeconds: result.timeTakenSeconds,
@@ -369,15 +503,27 @@ export class AnalyticsService {
         collegeId: assessment.collegeId,
         scope: "ASSESSMENT",
         assessmentId,
-        policy: { publishedOnly: true, tieBreakers: ["score", "timeTaken", "submissionTime"], anonymousByDefault: user.role !== Role.STUDENT },
+        policy: {
+          publishedOnly: true,
+          tieBreakers: ["score", "timeTaken", "submissionTime"],
+          anonymousByDefault: user.role !== Role.STUDENT,
+        },
         entries,
         createdById: user.id,
       },
     });
-    return this.ok({ enabled, policy: "Rank by score, then faster time, then earlier submission.", entries });
+    return this.ok({
+      enabled,
+      policy: "Rank by score, then faster time, then earlier submission.",
+      entries,
+    });
   }
 
-  async assessmentReport(user: AuthenticatedUser, assessmentId: string, query: AnalyticsQueryDto) {
+  async assessmentReport(
+    user: AuthenticatedUser,
+    assessmentId: string,
+    query: AnalyticsQueryDto,
+  ) {
     const analytics = await this.assessment(user, assessmentId, query);
     return this.ok({
       type: "assessment-result-report",
@@ -399,13 +545,24 @@ export class AnalyticsService {
       include: { answer: true, evaluations: true },
     });
     const answered = attempts.filter((item) => item.answer?.answeredAt);
-    const fullCredit = attempts.filter((item) => item.evaluations.some((evalItem) => evalItem.awardedMarks >= item.assignedMarks)).length;
-    const correct = attempts.filter((item) => item.evaluations.some((evalItem) => evalItem.isCorrect)).length;
+    const fullCredit = attempts.filter((item) =>
+      item.evaluations.some(
+        (evalItem) => evalItem.awardedMarks >= item.assignedMarks,
+      ),
+    ).length;
+    const correct = attempts.filter((item) =>
+      item.evaluations.some((evalItem) => evalItem.isCorrect),
+    ).length;
     const averageMarks = this.average(
-      attempts.flatMap((item) => item.evaluations.map((evalItem) => evalItem.awardedMarks)),
+      attempts.flatMap((item) =>
+        item.evaluations.map((evalItem) => evalItem.awardedMarks),
+      ),
     );
     const correctRate = this.percent(correct, attempts.length);
-    const measuredDifficulty = this.measuredDifficulty(correctRate, attempts.length);
+    const measuredDifficulty = this.measuredDifficulty(
+      correctRate,
+      attempts.length,
+    );
     await this.prisma.questionPerformanceSnapshot.create({
       data: {
         collegeId: question.collegeId,
@@ -418,8 +575,17 @@ export class AnalyticsService {
       },
     });
     return this.ok({
-      question: { id: question.id, topic: question.topic, bloomLevel: (question.metadata as Record<string, unknown> | null)?.bloomLevel ?? null, sourceType: this.questionSource(question.metadata) },
-      appearances: await this.prisma.assessmentQuestion.count({ where: { questionId } }),
+      question: {
+        id: question.id,
+        topic: question.topic,
+        bloomLevel:
+          (question.metadata as Record<string, unknown> | null)?.bloomLevel ??
+          null,
+        sourceType: this.questionSource(question.metadata),
+      },
+      appearances: await this.prisma.assessmentQuestion.count({
+        where: { questionId },
+      }),
       attempts: {
         totalAttempts: attempts.length,
         correctCount: correct,
@@ -434,7 +600,10 @@ export class AnalyticsService {
       measuredAt: new Date().toISOString(),
       sampleSize: attempts.length,
       lowSampleWarning: attempts.length < minStatsSample,
-      duplicateReferences: [...question.duplicateMatches, ...question.duplicateNewMatches].length,
+      duplicateReferences: [
+        ...question.duplicateMatches,
+        ...question.duplicateNewMatches,
+      ].length,
       trend: this.trendFromDates(attempts.map((item) => item.createdAt)),
       note: "Measured difficulty is advisory and never overwrites approved difficulty automatically.",
     });
@@ -444,7 +613,11 @@ export class AnalyticsService {
     const collegeId = this.scopeCollege(user, query.collegeId);
     const subjectIds = await this.allowedSubjectIds(user, collegeId);
     const subjects = await this.prisma.subject.findMany({
-      where: { collegeId, ...(subjectIds.length ? { id: { in: subjectIds } } : {}), ...(query.subjectId ? { id: query.subjectId } : {}) },
+      where: {
+        collegeId,
+        ...(subjectIds.length ? { id: { in: subjectIds } } : {}),
+        ...(query.subjectId ? { id: query.subjectId } : {}),
+      },
       take: Math.min(query.pageSize ?? 50, 100),
       orderBy: { subjectName: "asc" },
     });
@@ -453,10 +626,22 @@ export class AnalyticsService {
         subjects.map(async (subject) => ({
           id: subject.id,
           subjectName: subject.subjectName,
-          questionCoverage: await this.prisma.question.count({ where: { collegeId, subjectId: subject.id, deletedAt: null } }),
-          assessmentCoverage: await this.prisma.assessment.count({ where: { collegeId, subjectId: subject.id, deletedAt: null } }),
-          performance: this.scoreStats(await this.resultValues({ collegeId, assessment: { subjectId: subject.id } }, this.dateRange(query))),
-          distributions: await this.questionDistributions(collegeId, subject.id),
+          questionCoverage: await this.prisma.question.count({
+            where: { collegeId, subjectId: subject.id, deletedAt: null },
+          }),
+          assessmentCoverage: await this.prisma.assessment.count({
+            where: { collegeId, subjectId: subject.id, deletedAt: null },
+          }),
+          performance: this.scoreStats(
+            await this.resultValues(
+              { collegeId, assessment: { subjectId: subject.id } },
+              this.dateRange(query),
+            ),
+          ),
+          distributions: await this.questionDistributions(
+            collegeId,
+            subject.id,
+          ),
         })),
       ),
     });
@@ -465,7 +650,10 @@ export class AnalyticsService {
   async topics(user: AuthenticatedUser, query: AnalyticsQueryDto) {
     const collegeId = this.scopeCollege(user, query.collegeId);
     return this.ok({
-      data: await this.topicPerformance(collegeId, await this.allowedSubjectIds(user, collegeId)),
+      data: await this.topicPerformance(
+        collegeId,
+        await this.allowedSubjectIds(user, collegeId),
+      ),
       note: "Untested topics are derived from syllabus topics with no matching question topic.",
     });
   }
@@ -477,28 +665,65 @@ export class AnalyticsService {
       include: { units: { include: { topics: true } }, subject: true },
     });
     if (!syllabus) throw new NotFoundException("Syllabus not found.");
-    const questions = await this.prisma.question.findMany({ where: { collegeId: syllabus.collegeId, subjectId: syllabus.subjectId, deletedAt: null }, select: { topic: true, difficulty: true, questionType: true, metadata: true } });
-    const topicNames = syllabus.units.flatMap((unit) => unit.topics.map((topic) => topic.topicName));
-    const tested = new Set(questions.map((question) => question.topic).filter(Boolean));
+    const questions = await this.prisma.question.findMany({
+      where: {
+        collegeId: syllabus.collegeId,
+        subjectId: syllabus.subjectId,
+        deletedAt: null,
+      },
+      select: {
+        topic: true,
+        difficulty: true,
+        questionType: true,
+        metadata: true,
+      },
+    });
+    const topicNames = syllabus.units.flatMap((unit) =>
+      unit.topics.map((topic) => topic.topicName),
+    );
+    const tested = new Set(
+      questions.map((question) => question.topic).filter(Boolean),
+    );
     return this.ok({
-      syllabus: { id: syllabus.id, title: syllabus.title, subject: syllabus.subject.subjectName },
+      syllabus: {
+        id: syllabus.id,
+        title: syllabus.title,
+        subject: syllabus.subject.subjectName,
+      },
       questionCoverage: questions.length,
       untestedTopics: topicNames.filter((topic) => !tested.has(topic)),
-      bloomDistribution: this.countLabels(questions.map((question) => this.metadataLabel(question.metadata, "bloomLevel", "UNCLASSIFIED"))),
-      difficultyDistribution: this.countLabels(questions.map((question) => question.difficulty)),
-      questionTypeDistribution: this.countLabels(questions.map((question) => question.questionType ?? "UNKNOWN")),
+      bloomDistribution: this.countLabels(
+        questions.map((question) =>
+          this.metadataLabel(question.metadata, "bloomLevel", "UNCLASSIFIED"),
+        ),
+      ),
+      difficultyDistribution: this.countLabels(
+        questions.map((question) => question.difficulty),
+      ),
+      questionTypeDistribution: this.countLabels(
+        questions.map((question) => question.questionType ?? "UNKNOWN"),
+      ),
     });
   }
 
   async compare(user: AuthenticatedUser, dto: CompareAnalyticsDto) {
     const collegeId = this.scopeCollege(user, dto.collegeId);
     const groups = await this.comparisonGroups(collegeId, dto);
-    if (groups.length > 8) throw new BadRequestException("Compare up to 8 groups at a time.");
+    if (groups.length > 8)
+      throw new BadRequestException("Compare up to 8 groups at a time.");
     const rows = await Promise.all(
       groups.map(async (group) => {
         const where = this.groupResultWhere(collegeId, dto.dimension, group.id);
-        const stats = this.scoreStats(await this.resultValues(where, this.dateRange(dto)));
-        return { group, metric: dto.metric ?? "averageScore", value: stats.average, normalized: stats.average / 100, stats };
+        const stats = this.scoreStats(
+          await this.resultValues(where, this.dateRange(dto)),
+        );
+        return {
+          group,
+          metric: dto.metric ?? "averageScore",
+          value: stats.average,
+          normalized: stats.average / 100,
+          stats,
+        };
       }),
     );
     return this.ok({ dimension: dto.dimension, rows, csv: this.csv(rows) });
@@ -514,6 +739,77 @@ export class AnalyticsService {
     });
   }
 
+  async resultReports(user: AuthenticatedUser, query: AnalyticsQueryDto) {
+    this.ensureRole(user, [Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY]);
+    const rows = await this.resultReportRows(user, query);
+    const stats = this.scoreStats(
+      rows.map((row) => ({
+        percentage: row.percentage,
+        totalScore: row.marks,
+        timeTakenSeconds: row.timeTakenSeconds,
+      })),
+    );
+    return this.ok({
+      data: rows,
+      totals: {
+        attempts: rows.length,
+        averageScore: stats.average,
+        highestScore: stats.highest,
+        lowestScore: stats.lowest,
+        passPercentage: stats.passPercentage,
+        failPercentage: Number((100 - stats.passPercentage).toFixed(2)),
+        averageTimeSeconds: this.average(
+          rows
+            .map((row) => row.timeTakenSeconds)
+            .filter((value): value is number => typeof value === "number"),
+        ),
+      },
+      charts: {
+        scoreDistribution: this.histogram(rows.map((row) => row.percentage)),
+        passFail: [
+          {
+            label: "Pass",
+            value: rows.filter((row) => row.passFail === "PASS").length,
+          },
+          {
+            label: "Fail",
+            value: rows.filter((row) => row.passFail === "FAIL").length,
+          },
+          {
+            label: "Pending",
+            value: rows.filter((row) => row.passFail === "PENDING").length,
+          },
+        ],
+        violations: [
+          {
+            label: "No violations",
+            value: rows.filter((row) => row.violations === 0).length,
+          },
+          {
+            label: "With violations",
+            value: rows.filter((row) => row.violations > 0).length,
+          },
+        ],
+      },
+    });
+  }
+
+  async resultReportsCsv(user: AuthenticatedUser, query: AnalyticsQueryDto) {
+    this.ensureRole(user, [Role.SUPER_ADMIN, Role.COLLEGE_ADMIN, Role.FACULTY]);
+    const rows = await this.resultReportRows(user, query);
+    await this.audit(
+      user,
+      AuditEvent.REPORT_DOWNLOAD,
+      this.reportCollegeId(user),
+      "Assessment result CSV exported.",
+      {
+        reportType: "assessment-results",
+        rowCount: rows.length,
+      },
+    );
+    return this.csv(rows);
+  }
+
   async createReport(user: AuthenticatedUser, dto: CreateReportDefinitionDto) {
     const report = await this.prisma.reportDefinition.create({
       data: {
@@ -522,13 +818,21 @@ export class AnalyticsService {
         name: dto.name.trim(),
         reportType: dto.reportType,
         description: dto.description,
-        columns: dto.columns?.length ? dto.columns : ["name", "score", "status"],
+        columns: dto.columns?.length
+          ? dto.columns
+          : ["name", "score", "status"],
         outputFormat: dto.outputFormat ?? ReportOutputFormat.CSV,
         filters: {},
         createdById: user.id,
       },
     });
-    await this.audit(user, AuditEvent.REPORT_CREATE, report.collegeId, "Report definition created.", { reportId: report.id });
+    await this.audit(
+      user,
+      AuditEvent.REPORT_CREATE,
+      report.collegeId,
+      "Report definition created.",
+      { reportId: report.id },
+    );
     return this.ok(report);
   }
 
@@ -536,14 +840,20 @@ export class AnalyticsService {
     return this.ok(await this.scopedReport(user, id));
   }
 
-  async updateReport(user: AuthenticatedUser, id: string, dto: UpdateReportDefinitionDto) {
+  async updateReport(
+    user: AuthenticatedUser,
+    id: string,
+    dto: UpdateReportDefinitionDto,
+  ) {
     await this.scopedReport(user, id);
     const report = await this.prisma.reportDefinition.update({
       where: { id },
       data: {
         ...(dto.name ? { name: dto.name.trim() } : {}),
         ...(dto.reportType ? { reportType: dto.reportType } : {}),
-        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.description !== undefined
+          ? { description: dto.description }
+          : {}),
         ...(dto.columns?.length ? { columns: dto.columns } : {}),
         ...(dto.outputFormat ? { outputFormat: dto.outputFormat } : {}),
         updatedById: user.id,
@@ -590,17 +900,33 @@ export class AnalyticsService {
         sizeBytes: Buffer.byteLength(csv),
         storageKey: `reports/${job.id}.csv`,
         expiresAt: this.daysFromNow(7),
-        metadata: { content: csv, generatedAt: new Date().toISOString(), reportReferenceId: job.id },
+        metadata: {
+          content: csv,
+          generatedAt: new Date().toISOString(),
+          reportReferenceId: job.id,
+        },
       },
     });
-    await this.audit(user, AuditEvent.REPORT_RUN, report.collegeId, "Report generated.", { reportId: report.id, jobId: job.id, fileId: file.id });
+    await this.audit(
+      user,
+      AuditEvent.REPORT_RUN,
+      report.collegeId,
+      "Report generated.",
+      { reportId: report.id, jobId: job.id, fileId: file.id },
+    );
     return this.ok({ job, file });
   }
 
-  async scheduleReport(user: AuthenticatedUser, id: string, dto: ScheduleReportDto) {
+  async scheduleReport(
+    user: AuthenticatedUser,
+    id: string,
+    dto: ScheduleReportDto,
+  ) {
     const report = await this.scopedReport(user, id);
     if (dto.frequency === "CRON" && user.role !== Role.SUPER_ADMIN) {
-      throw new ForbiddenException("Custom cron schedules require platform administration.");
+      throw new ForbiddenException(
+        "Custom cron schedules require platform administration.",
+      );
     }
     return this.ok(
       await this.prisma.reportSchedule.create({
@@ -619,7 +945,13 @@ export class AnalyticsService {
   }
 
   async reportJobs(user: AuthenticatedUser) {
-    return this.ok({ data: await this.prisma.reportGenerationJob.findMany({ where: this.jobScope(user), orderBy: { createdAt: "desc" }, take: 100 }) });
+    return this.ok({
+      data: await this.prisma.reportGenerationJob.findMany({
+        where: this.jobScope(user),
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+    });
   }
 
   async reportJob(user: AuthenticatedUser, jobId: string) {
@@ -628,13 +960,25 @@ export class AnalyticsService {
 
   async cancelReportJob(user: AuthenticatedUser, jobId: string) {
     await this.scopedJob(user, jobId);
-    return this.ok(await this.prisma.reportGenerationJob.update({ where: { id: jobId }, data: { status: ReportJobStatus.CANCELLED } }));
+    return this.ok(
+      await this.prisma.reportGenerationJob.update({
+        where: { id: jobId },
+        data: { status: ReportJobStatus.CANCELLED },
+      }),
+    );
   }
 
-  async downloadReport(user: AuthenticatedUser, fileId: string, request: CookieRequest) {
-    const file = await this.prisma.reportFile.findFirst({ where: { id: fileId, ...this.fileScope(user) } });
+  async downloadReport(
+    user: AuthenticatedUser,
+    fileId: string,
+    request: CookieRequest,
+  ) {
+    const file = await this.prisma.reportFile.findFirst({
+      where: { id: fileId, ...this.fileScope(user) },
+    });
     if (!file) throw new NotFoundException("Report file not found.");
-    if (file.expiresAt.getTime() < Date.now()) throw new ForbiddenException("Report file has expired.");
+    if (file.expiresAt.getTime() < Date.now())
+      throw new ForbiddenException("Report file has expired.");
     await this.prisma.exportAudit.create({
       data: {
         collegeId: file.collegeId,
@@ -644,11 +988,19 @@ export class AnalyticsService {
         reportType: this.metadataLabel(file.metadata, "reportType", "report"),
         format: file.outputFormat,
         ipAddress: request.ip,
-        userAgent: Array.isArray(request.headers["user-agent"]) ? request.headers["user-agent"][0] : request.headers["user-agent"],
+        userAgent: Array.isArray(request.headers["user-agent"])
+          ? request.headers["user-agent"][0]
+          : request.headers["user-agent"],
         metadata: { fileName: file.fileName },
       },
     });
-    await this.audit(user, AuditEvent.REPORT_DOWNLOAD, file.collegeId, "Report downloaded.", { fileId });
+    await this.audit(
+      user,
+      AuditEvent.REPORT_DOWNLOAD,
+      file.collegeId,
+      "Report downloaded.",
+      { fileId },
+    );
     const metadata = file.metadata as Record<string, unknown> | null;
     return typeof metadata?.content === "string"
       ? metadata.content
@@ -658,21 +1010,32 @@ export class AnalyticsService {
   async insights(user: AuthenticatedUser, query: AnalyticsQueryDto) {
     return this.ok({
       data: await this.prisma.analyticsInsight.findMany({
-        where: { ...this.insightScope(user), ...(query.assessmentId ? { assessmentId: query.assessmentId } : {}) },
+        where: {
+          ...this.insightScope(user),
+          ...(query.assessmentId ? { assessmentId: query.assessmentId } : {}),
+        },
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
-      disclaimer: "AI-assisted insights are suggestions for human review, not guaranteed facts.",
+      disclaimer:
+        "AI-assisted insights are suggestions for human review, not guaranteed facts.",
     });
   }
 
   async generateInsights(user: AuthenticatedUser, query: AnalyticsQueryDto) {
     const collegeId = this.scopeCollege(user, query.collegeId);
-    const insightQuery = Object.assign(new AnalyticsQueryDto(), query, { collegeId });
+    const insightQuery = Object.assign(new AnalyticsQueryDto(), query, {
+      collegeId,
+    });
     const college = await this.college(user, insightQuery);
-    const data = college.data as { rates?: { passPercentage?: number }; totals?: { pendingReviews?: number } };
+    const data = college.data as {
+      rates?: { passPercentage?: number };
+      totals?: { pendingReviews?: number };
+    };
     const weak = (data.rates?.passPercentage ?? 0) < 60;
-    const title = weak ? "Review weak assessment outcomes" : "Maintain current performance trend";
+    const title = weak
+      ? "Review weak assessment outcomes"
+      : "Maintain current performance trend";
     const insight = await this.prisma.analyticsInsight.create({
       data: {
         collegeId,
@@ -687,28 +1050,65 @@ export class AnalyticsService {
           ? "Review weak topics, rebalance blueprint coverage, and schedule faculty review before high-stakes decisions."
           : "Continue monitoring topic-level distribution and pending reviews.",
         confidence: 0.55,
-        source: process.env.NODE_ENV === "production" ? "rule-based" : "mock-ai-advisory",
-        aggregatePayload: { passPercentage: data.rates?.passPercentage, pendingReviews: data.totals?.pendingReviews },
+        source:
+          process.env.NODE_ENV === "production"
+            ? "rule-based"
+            : "mock-ai-advisory",
+        aggregatePayload: {
+          passPercentage: data.rates?.passPercentage,
+          pendingReviews: data.totals?.pendingReviews,
+        },
         createdById: user.id,
       },
     });
-    return this.ok({ insight, providerState: "No live provider call is made without configured server-side keys.", predictiveAnalytics: this.predictiveLimitations() });
+    return this.ok({
+      insight,
+      providerState:
+        "No live provider call is made without configured server-side keys.",
+      predictiveAnalytics: this.predictiveLimitations(),
+    });
   }
 
-  async reviewInsight(user: AuthenticatedUser, id: string, dto: ReviewInsightDto) {
-    const insight = await this.prisma.analyticsInsight.findFirst({ where: { id, ...this.insightScope(user) } });
+  async reviewInsight(
+    user: AuthenticatedUser,
+    id: string,
+    dto: ReviewInsightDto,
+  ) {
+    const insight = await this.prisma.analyticsInsight.findFirst({
+      where: { id, ...this.insightScope(user) },
+    });
     if (!insight) throw new NotFoundException("Insight not found.");
     const updated = await this.prisma.analyticsInsight.update({
       where: { id },
-      data: { status: dto.status, reviewNote: dto.reviewNote, reviewedById: user.id, reviewedAt: new Date(), updatedById: user.id },
+      data: {
+        status: dto.status,
+        reviewNote: dto.reviewNote,
+        reviewedById: user.id,
+        reviewedAt: new Date(),
+        updatedById: user.id,
+      },
     });
-    await this.audit(user, AuditEvent.ANALYTICS_INSIGHT_REVIEW, updated.collegeId, "Analytics insight reviewed.", { insightId: id, status: dto.status });
+    await this.audit(
+      user,
+      AuditEvent.ANALYTICS_INSIGHT_REVIEW,
+      updated.collegeId,
+      "Analytics insight reviewed.",
+      { insightId: id, status: dto.status },
+    );
     return this.ok(updated);
   }
 
-  private async studentByUserId(user: AuthenticatedUser, studentUserId: string, query: AnalyticsQueryDto, self: boolean) {
+  private async studentByUserId(
+    user: AuthenticatedUser,
+    studentUserId: string,
+    query: AnalyticsQueryDto,
+    self: boolean,
+  ) {
     if (!self) await this.ensureStudentVisible(user, studentUserId);
-    const results = await this.resultValues({ studentId: studentUserId, isPublished: true }, this.dateRange(query));
+    const results = await this.resultValues(
+      { studentId: studentUserId, isPublished: true },
+      this.dateRange(query),
+    );
     const stats = this.scoreStats(results);
     const recent = results[0];
     return this.ok({
@@ -732,39 +1132,72 @@ export class AnalyticsService {
     });
   }
 
-  private async scopedAssessment(user: AuthenticatedUser, assessmentId: string, allowStudent = false) {
-    const assessment = await this.prisma.assessment.findFirst({ where: { id: assessmentId, deletedAt: null } });
+  private async scopedAssessment(
+    user: AuthenticatedUser,
+    assessmentId: string,
+    allowStudent = false,
+  ) {
+    const assessment = await this.prisma.assessment.findFirst({
+      where: { id: assessmentId, deletedAt: null },
+    });
     if (!assessment) throw new NotFoundException("Assessment not found.");
-    if (user.role !== Role.SUPER_ADMIN && assessment.collegeId !== user.collegeId) {
+    if (
+      user.role !== Role.SUPER_ADMIN &&
+      assessment.collegeId !== user.collegeId
+    ) {
       throw new ForbiddenException("Assessment is outside your tenant.");
     }
-    if (user.role === Role.STUDENT && !allowStudent) throw new ForbiddenException("Students cannot access this assessment analytics.");
+    if (user.role === Role.STUDENT && !allowStudent)
+      throw new ForbiddenException(
+        "Students cannot access this assessment analytics.",
+      );
     if (user.role === Role.FACULTY) {
-      const allowed = await this.allowedSubjectIds(user, assessment.collegeId ?? "");
-      if (assessment.subjectId && allowed.length && !allowed.includes(assessment.subjectId)) {
-        throw new ForbiddenException("Assessment is outside assigned subjects.");
+      const allowed = await this.allowedSubjectIds(
+        user,
+        assessment.collegeId ?? "",
+      );
+      if (
+        assessment.subjectId &&
+        allowed.length &&
+        !allowed.includes(assessment.subjectId)
+      ) {
+        throw new ForbiddenException(
+          "Assessment is outside assigned subjects.",
+        );
       }
     }
     return assessment;
   }
 
   private async scopedReport(user: AuthenticatedUser, id: string) {
-    const report = await this.prisma.reportDefinition.findFirst({ where: { id, ...this.reportScope(user) } });
+    const report = await this.prisma.reportDefinition.findFirst({
+      where: { id, ...this.reportScope(user) },
+    });
     if (!report) throw new NotFoundException("Report not found.");
     return report;
   }
 
   private async scopedJob(user: AuthenticatedUser, jobId: string) {
-    const job = await this.prisma.reportGenerationJob.findFirst({ where: { id: jobId, ...this.jobScope(user) } });
+    const job = await this.prisma.reportGenerationJob.findFirst({
+      where: { id: jobId, ...this.jobScope(user) },
+    });
     if (!job) throw new NotFoundException("Report job not found.");
     return job;
   }
 
-  private async resultValues(where: Prisma.ResultWhereInput, range: DateRange): Promise<Array<NumericResult & { createdAt: Date }>> {
+  private async resultValues(
+    where: Prisma.ResultWhereInput,
+    range: DateRange,
+  ): Promise<Array<NumericResult & { createdAt: Date }>> {
     return this.prisma.result.findMany({
       where: { ...where, ...this.resultRange(range) },
       orderBy: { createdAt: "desc" },
-      select: { percentage: true, totalScore: true, timeTakenSeconds: true, createdAt: true },
+      select: {
+        percentage: true,
+        totalScore: true,
+        timeTakenSeconds: true,
+        createdAt: true,
+      },
     });
   }
 
@@ -775,23 +1208,45 @@ export class AnalyticsService {
     const median = sorted.length
       ? sorted.length % 2
         ? sorted[Math.floor(sorted.length / 2)]
-        : ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
+        : ((sorted[sorted.length / 2 - 1] ?? 0) +
+            (sorted[sorted.length / 2] ?? 0)) /
+          2
       : 0;
-    const variance = values.length ? this.average(values.map((value) => (value - average) ** 2)) : 0;
+    const variance = values.length
+      ? this.average(values.map((value) => (value - average) ** 2))
+      : 0;
     return {
       sampleSize: values.length,
       average,
       median,
       highest: sorted.at(-1) ?? 0,
       lowest: sorted[0] ?? 0,
-      passPercentage: this.percent(values.filter((value) => value >= 40).length, values.length),
+      passPercentage: this.percent(
+        values.filter((value) => value >= 40).length,
+        values.length,
+      ),
+      failPercentage: this.percent(
+        values.filter((value) => value < 40).length,
+        values.length,
+      ),
+      averageTimeSeconds: this.average(
+        results
+          .map((item) => item.timeTakenSeconds)
+          .filter((value): value is number => typeof value === "number"),
+      ),
       variance,
       standardDeviation: Math.sqrt(variance),
       lowSampleWarning: values.length > 0 && values.length < minStatsSample,
     };
   }
 
-  private standardCharts(results: NumericResult[], attempts: Array<{ status: TestAttemptStatus; totalDurationSeconds?: number | null }>) {
+  private standardCharts(
+    results: NumericResult[],
+    attempts: Array<{
+      status: TestAttemptStatus;
+      totalDurationSeconds?: number | null;
+    }>,
+  ) {
     const scores = results.map((item) => item.percentage);
     return {
       scoreDistribution: this.histogram(scores),
@@ -801,8 +1256,26 @@ export class AnalyticsService {
       ],
       attemptStatus: this.countLabels(attempts.map((item) => item.status)),
       percentileBands: [
-        { label: "Top 10%", value: scores.filter((score) => score >= 90).length },
-        { label: "Bottom 10%", value: scores.filter((score) => score <= 10).length },
+        {
+          label: "Top 10%",
+          value: scores.filter((score) => score >= 90).length,
+        },
+        {
+          label: "Bottom 10%",
+          value: scores.filter((score) => score <= 10).length,
+        },
+      ],
+      averageTime: [
+        {
+          label: "Average Time",
+          value: Math.round(
+            this.average(
+              results
+                .map((item) => item.timeTakenSeconds)
+                .filter((value): value is number => typeof value === "number"),
+            ),
+          ),
+        },
       ],
     };
   }
@@ -817,24 +1290,43 @@ export class AnalyticsService {
     ];
     return buckets.map((bucket) => ({
       label: `${String(bucket[0])}-${String(bucket[1])}`,
-      value: values.filter((value) => value >= bucket[0] && value <= bucket[1]).length,
+      value: values.filter((value) => value >= bucket[0] && value <= bucket[1])
+        .length,
     }));
   }
 
-  private async questionAccuracy(input: { collegeId?: string; assessmentId?: string; subjectIds?: string[] }) {
+  private async questionAccuracy(input: {
+    collegeId?: string;
+    assessmentId?: string;
+    subjectIds?: string[];
+  }) {
     const questions = await this.prisma.attemptQuestion.findMany({
       where: {
-        ...(input.assessmentId ? { attempt: { assessmentId: input.assessmentId } } : {}),
+        ...(input.assessmentId
+          ? { attempt: { assessmentId: input.assessmentId } }
+          : {}),
         ...(input.collegeId ? { attempt: { collegeId: input.collegeId } } : {}),
-        ...(input.subjectIds?.length ? { assessmentQuestion: { question: { subjectId: { in: input.subjectIds } } } } : {}),
+        ...(input.subjectIds?.length
+          ? {
+              assessmentQuestion: {
+                question: { subjectId: { in: input.subjectIds } },
+              },
+            }
+          : {}),
       },
       take: 1000,
-      include: { evaluations: true, assessmentQuestion: { include: { question: true } } },
+      include: {
+        evaluations: true,
+        assessmentQuestion: { include: { question: true } },
+      },
     });
     return questions.slice(0, 100).map((item) => ({
       questionId: item.originalQuestionId,
       topic: item.assessmentQuestion?.question.topic,
-      accuracy: this.percent(item.evaluations.filter((evaluation) => evaluation.isCorrect).length, item.evaluations.length),
+      accuracy: this.percent(
+        item.evaluations.filter((evaluation) => evaluation.isCorrect).length,
+        item.evaluations.length,
+      ),
       sampleSize: item.evaluations.length,
       lowSampleWarning: item.evaluations.length < minStatsSample,
     }));
@@ -842,11 +1334,17 @@ export class AnalyticsService {
 
   private async topicPerformance(collegeId: string, subjectIds: string[]) {
     const questions = await this.prisma.question.findMany({
-      where: { collegeId, deletedAt: null, ...(subjectIds.length ? { subjectId: { in: subjectIds } } : {}) },
+      where: {
+        collegeId,
+        deletedAt: null,
+        ...(subjectIds.length ? { subjectId: { in: subjectIds } } : {}),
+      },
       select: { topic: true, difficulty: true, questionType: true },
       take: 500,
     });
-    return Object.entries(this.countLabels(questions.map((item) => item.topic ?? "Unclassified"))).map(([topic, count]) => ({
+    return Object.entries(
+      this.countLabels(questions.map((item) => item.topic ?? "Unclassified")),
+    ).map(([topic, count]) => ({
       topic,
       questionCount: count,
       status: count >= 3 ? "covered" : "coverage-gap",
@@ -872,75 +1370,261 @@ export class AnalyticsService {
     }));
   }
 
-  private async reportRows(user: AuthenticatedUser, reportType: string, query: AnalyticsQueryDto) {
+  private async reportRows(
+    user: AuthenticatedUser,
+    reportType: string,
+    query: AnalyticsQueryDto,
+  ) {
     if (reportType === "ai-usage") {
-      return this.prisma.aiUsageRecord.findMany({ where: this.tenantWhere(this.scopeCollege(user, query.collegeId)), take: 1000 });
+      return this.prisma.aiUsageRecord.findMany({
+        where: this.tenantWhere(this.scopeCollege(user, query.collegeId)),
+        take: 1000,
+      });
     }
-    return this.prisma.result.findMany({
-      where: { ...this.tenantWhere(this.scopeCollege(user, query.collegeId)), ...this.resultRange(this.dateRange(query)), isPublished: true },
+    return this.resultReportRows(user, query);
+  }
+
+  private async resultReportRows(
+    user: AuthenticatedUser,
+    query: AnalyticsQueryDto,
+  ) {
+    const collegeId = this.scopeCollege(user, query.collegeId);
+    const range = this.dateRange(query);
+    const resultWhere: Prisma.ResultWhereInput = {
+      ...this.tenantWhere(collegeId),
+      ...this.resultRange(range),
+      ...(query.assessmentId ? { assessmentId: query.assessmentId } : {}),
+      ...(query.subjectId
+        ? { assessment: { subjectId: query.subjectId } }
+        : {}),
+    };
+    const results = await this.prisma.result.findMany({
+      where: resultWhere,
+      orderBy: [{ createdAt: "desc" }],
       take: maxReportRows,
-      select: { id: true, assessmentId: true, studentId: true, totalScore: true, percentage: true, passStatus: true, isPublished: true, createdAt: true },
+      include: {
+        assessment: {
+          select: {
+            id: true,
+            title: true,
+            totalMarks: true,
+            passingMarks: true,
+          },
+        },
+        attempt: {
+          select: {
+            id: true,
+            startedAt: true,
+            submittedAt: true,
+            autoSubmittedAt: true,
+            status: true,
+            securityFlags: { select: { id: true } },
+            student: {
+              select: {
+                name: true,
+                email: true,
+                studentId: true,
+                studentProfile: { select: { rollNumber: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    const proctoringCounts = await this.proctoringViolationCounts(
+      results.map((result) => result.attemptId),
+    );
+    return results.map((result) => {
+      const submittedAt =
+        result.attempt.submittedAt ?? result.attempt.autoSubmittedAt;
+      return {
+        studentName: result.attempt.student.name,
+        rollNumber: result.attempt.student.studentProfile?.rollNumber ?? "",
+        studentId: result.attempt.student.studentId ?? "",
+        studentEmail: result.attempt.student.email,
+        assessment: result.assessment.title,
+        assessmentId: result.assessmentId,
+        attemptId: result.attemptId,
+        marks: result.totalScore,
+        totalMarks: result.assessment.totalMarks,
+        percentage: result.percentage,
+        passFail: result.passStatus,
+        submittedTime: submittedAt?.toISOString() ?? "",
+        timeTakenSeconds: result.timeTakenSeconds,
+        timeTaken: this.formatDuration(result.timeTakenSeconds),
+        violations:
+          result.attempt.securityFlags.length +
+          (proctoringCounts.get(result.attemptId) ?? 0),
+        resultStatus: result.evaluationStatus,
+        attemptStatus: result.attempt.status,
+        published: result.isPublished,
+      };
     });
   }
 
   private csv(rows: unknown[]) {
-    const safeRows = rows.map((row) => (row && typeof row === "object" ? (row as Record<string, unknown>) : { value: row }));
-    const headers = Array.from(new Set(safeRows.flatMap((row) => Object.keys(row))));
+    const safeRows = rows.map((row) =>
+      row && typeof row === "object"
+        ? (row as Record<string, unknown>)
+        : { value: row },
+    );
+    const headers = Array.from(
+      new Set(safeRows.flatMap((row) => Object.keys(row))),
+    );
     const lines = [
       headers.join(","),
-      ...safeRows.map((row) => headers.map((header) => this.csvCell(row[header])).join(",")),
+      ...safeRows.map((row) =>
+        headers.map((header) => this.csvCell(row[header])).join(","),
+      ),
     ];
     return `Generated At,${new Date().toISOString()}\n${lines.join("\n")}`;
   }
 
   private csvCell(value: unknown) {
-    const text = typeof value === "string" ? value : value instanceof Date ? value.toISOString() : JSON.stringify(value ?? "");
+    const text =
+      typeof value === "string"
+        ? value
+        : value instanceof Date
+          ? value.toISOString()
+          : JSON.stringify(value ?? "");
     const escaped = /^[=+\-@]/.test(text) ? `'${text}` : text;
-    return `"${escaped.replaceAll("\"", "\"\"")}"`;
+    return `"${escaped.replaceAll('"', '""')}"`;
+  }
+
+  private async proctoringViolationCounts(attemptIds: string[]) {
+    if (!attemptIds.length) return new Map<string, number>();
+    const rows = await this.prisma.proctoringEvent.groupBy({
+      by: ["attemptId"],
+      where: { attemptId: { in: attemptIds }, riskDelta: { gt: 0 } },
+      _count: true,
+    });
+    return new Map(rows.map((row) => [row.attemptId, row._count]));
+  }
+
+  private formatDuration(seconds: number | null) {
+    if (seconds === null) return "";
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
   }
 
   private async comparisonGroups(collegeId: string, dto: CompareAnalyticsDto) {
     const take = Math.min(dto.groupIds?.length ?? 6, 8);
     if (dto.dimension === "department") {
-      return this.prisma.department.findMany({ where: { collegeId, ...(dto.groupIds?.length ? { id: { in: dto.groupIds } } : {}) }, take, select: { id: true, departmentName: true } }).then((rows) => rows.map((row) => ({ id: row.id, label: row.departmentName })));
+      return this.prisma.department
+        .findMany({
+          where: {
+            collegeId,
+            ...(dto.groupIds?.length ? { id: { in: dto.groupIds } } : {}),
+          },
+          take,
+          select: { id: true, departmentName: true },
+        })
+        .then((rows) =>
+          rows.map((row) => ({ id: row.id, label: row.departmentName })),
+        );
     }
     if (dto.dimension === "batch") {
-      return this.prisma.batch.findMany({ where: { collegeId, ...(dto.groupIds?.length ? { id: { in: dto.groupIds } } : {}) }, take, select: { id: true, batchName: true } }).then((rows) => rows.map((row) => ({ id: row.id, label: row.batchName })));
+      return this.prisma.batch
+        .findMany({
+          where: {
+            collegeId,
+            ...(dto.groupIds?.length ? { id: { in: dto.groupIds } } : {}),
+          },
+          take,
+          select: { id: true, batchName: true },
+        })
+        .then((rows) =>
+          rows.map((row) => ({ id: row.id, label: row.batchName })),
+        );
     }
-    return this.prisma.subject.findMany({ where: { collegeId, ...(dto.groupIds?.length ? { id: { in: dto.groupIds } } : {}) }, take, select: { id: true, subjectName: true } }).then((rows) => rows.map((row) => ({ id: row.id, label: row.subjectName })));
+    return this.prisma.subject
+      .findMany({
+        where: {
+          collegeId,
+          ...(dto.groupIds?.length ? { id: { in: dto.groupIds } } : {}),
+        },
+        take,
+        select: { id: true, subjectName: true },
+      })
+      .then((rows) =>
+        rows.map((row) => ({ id: row.id, label: row.subjectName })),
+      );
   }
 
-  private groupResultWhere(collegeId: string, dimension: string, id: string): Prisma.ResultWhereInput {
-    if (dimension === "department") return { collegeId, attempt: { student: { studentProfile: { departmentId: id } } } };
-    if (dimension === "batch") return { collegeId, attempt: { student: { studentProfile: { batchId: id } } } };
+  private groupResultWhere(
+    collegeId: string,
+    dimension: string,
+    id: string,
+  ): Prisma.ResultWhereInput {
+    if (dimension === "department")
+      return {
+        collegeId,
+        attempt: { student: { studentProfile: { departmentId: id } } },
+      };
+    if (dimension === "batch")
+      return {
+        collegeId,
+        attempt: { student: { studentProfile: { batchId: id } } },
+      };
     return { collegeId, assessment: { subjectId: id } };
   }
 
   private dateRange(query: AnalyticsQueryDto): DateRange {
     const from = query.from ? new Date(query.from) : undefined;
     const to = query.to ? new Date(query.to) : undefined;
-    if (from && Number.isNaN(from.getTime())) throw new BadRequestException("Invalid from date.");
-    if (to && Number.isNaN(to.getTime())) throw new BadRequestException("Invalid to date.");
-    if (from && to && to.getTime() < from.getTime()) throw new BadRequestException("Date range is invalid.");
+    if (from && Number.isNaN(from.getTime()))
+      throw new BadRequestException("Invalid from date.");
+    if (to && Number.isNaN(to.getTime()))
+      throw new BadRequestException("Invalid to date.");
+    if (from && to && to.getTime() < from.getTime())
+      throw new BadRequestException("Date range is invalid.");
     const maxMs = 366 * 24 * 60 * 60 * 1000;
-    if (from && to && to.getTime() - from.getTime() > maxMs) throw new BadRequestException("Date range cannot exceed one year.");
+    if (from && to && to.getTime() - from.getTime() > maxMs)
+      throw new BadRequestException("Date range cannot exceed one year.");
     return { from, to, label: from || to ? "custom" : "all-time" };
   }
 
   private createdRange(range: DateRange) {
-    return range.from || range.to ? { createdAt: { ...(range.from ? { gte: range.from } : {}), ...(range.to ? { lte: range.to } : {}) } } : {};
+    return range.from || range.to
+      ? {
+          createdAt: {
+            ...(range.from ? { gte: range.from } : {}),
+            ...(range.to ? { lte: range.to } : {}),
+          },
+        }
+      : {};
   }
 
   private startedRange(range: DateRange) {
-    return range.from || range.to ? { startedAt: { ...(range.from ? { gte: range.from } : {}), ...(range.to ? { lte: range.to } : {}) } } : {};
+    return range.from || range.to
+      ? {
+          startedAt: {
+            ...(range.from ? { gte: range.from } : {}),
+            ...(range.to ? { lte: range.to } : {}),
+          },
+        }
+      : {};
   }
 
   private resultRange(range: DateRange) {
-    return range.from || range.to ? { createdAt: { ...(range.from ? { gte: range.from } : {}), ...(range.to ? { lte: range.to } : {}) } } : {};
+    return range.from || range.to
+      ? {
+          createdAt: {
+            ...(range.from ? { gte: range.from } : {}),
+            ...(range.to ? { lte: range.to } : {}),
+          },
+        }
+      : {};
   }
 
   private rangeMeta(range: DateRange) {
-    return { from: range.from?.toISOString() ?? null, to: range.to?.toISOString() ?? null, timezone: "Asia/Kolkata", label: range.label };
+    return {
+      from: range.from?.toISOString() ?? null,
+      to: range.to?.toISOString() ?? null,
+      timezone: "Asia/Kolkata",
+      label: range.label,
+    };
   }
 
   private scopeCollege(user: AuthenticatedUser, requested?: string) {
@@ -948,8 +1632,10 @@ export class AnalyticsService {
       if (requested) return requested;
       return user.collegeId ?? "";
     }
-    if (!user.collegeId) throw new ForbiddenException("College scope is required.");
-    if (requested && requested !== user.collegeId) throw new ForbiddenException("Cross-tenant analytics are not allowed.");
+    if (!user.collegeId)
+      throw new ForbiddenException("College scope is required.");
+    if (requested && requested !== user.collegeId)
+      throw new ForbiddenException("Cross-tenant analytics are not allowed.");
     return user.collegeId;
   }
 
@@ -958,56 +1644,92 @@ export class AnalyticsService {
   }
 
   private questionScope(user: AuthenticatedUser): Prisma.QuestionWhereInput {
-    return user.role === Role.SUPER_ADMIN ? { deletedAt: null } : { collegeId: user.collegeId, deletedAt: null };
+    return user.role === Role.SUPER_ADMIN
+      ? { deletedAt: null }
+      : { collegeId: user.collegeId, deletedAt: null };
   }
 
   private reportCollegeId(user: AuthenticatedUser) {
     return user.role === Role.SUPER_ADMIN ? null : user.collegeId;
   }
 
-  private reportScope(user: AuthenticatedUser): Prisma.ReportDefinitionWhereInput {
-    return user.role === Role.SUPER_ADMIN ? {} : { collegeId: user.collegeId, OR: [{ ownerId: user.id }, { isShared: true }] };
+  private reportScope(
+    user: AuthenticatedUser,
+  ): Prisma.ReportDefinitionWhereInput {
+    return user.role === Role.SUPER_ADMIN
+      ? {}
+      : {
+          collegeId: user.collegeId,
+          OR: [{ ownerId: user.id }, { isShared: true }],
+        };
   }
 
-  private jobScope(user: AuthenticatedUser): Prisma.ReportGenerationJobWhereInput {
-    return user.role === Role.SUPER_ADMIN ? {} : { collegeId: user.collegeId, requestedById: user.id };
+  private jobScope(
+    user: AuthenticatedUser,
+  ): Prisma.ReportGenerationJobWhereInput {
+    return user.role === Role.SUPER_ADMIN
+      ? {}
+      : { collegeId: user.collegeId, requestedById: user.id };
   }
 
   private fileScope(user: AuthenticatedUser): Prisma.ReportFileWhereInput {
-    return user.role === Role.SUPER_ADMIN ? {} : { collegeId: user.collegeId, requestedById: user.id };
+    return user.role === Role.SUPER_ADMIN
+      ? {}
+      : { collegeId: user.collegeId, requestedById: user.id };
   }
 
-  private insightScope(user: AuthenticatedUser): Prisma.AnalyticsInsightWhereInput {
+  private insightScope(
+    user: AuthenticatedUser,
+  ): Prisma.AnalyticsInsightWhereInput {
     return user.role === Role.SUPER_ADMIN ? {} : { collegeId: user.collegeId };
   }
 
   private ensureRole(user: AuthenticatedUser, roles: Role[]) {
-    if (!roles.includes(user.role)) throw new ForbiddenException("Not allowed.");
+    if (!roles.includes(user.role))
+      throw new ForbiddenException("Not allowed.");
   }
 
-  private async ensureStudentVisible(user: AuthenticatedUser, studentUserId: string, knownCollegeId?: string) {
+  private async ensureStudentVisible(
+    user: AuthenticatedUser,
+    studentUserId: string,
+    knownCollegeId?: string,
+  ) {
     if (user.role === Role.SUPER_ADMIN) return;
     if (user.role === Role.STUDENT && user.id === studentUserId) return;
     const profile = knownCollegeId
       ? { collegeId: knownCollegeId }
-      : await this.prisma.studentProfile.findUnique({ where: { userId: studentUserId }, select: { collegeId: true } });
-    if (!profile || profile.collegeId !== user.collegeId) throw new ForbiddenException("Student is outside your tenant.");
+      : await this.prisma.studentProfile.findUnique({
+          where: { userId: studentUserId },
+          select: { collegeId: true },
+        });
+    if (!profile || profile.collegeId !== user.collegeId)
+      throw new ForbiddenException("Student is outside your tenant.");
     if (user.role === Role.FACULTY) {
       const batches = await this.assignedBatchIds(user, profile.collegeId);
-      const student = await this.prisma.studentProfile.findUnique({ where: { userId: studentUserId }, select: { batchId: true } });
-      if (student && batches.length && !batches.includes(student.batchId)) throw new ForbiddenException("Student is outside assigned batches.");
+      const student = await this.prisma.studentProfile.findUnique({
+        where: { userId: studentUserId },
+        select: { batchId: true },
+      });
+      if (student && batches.length && !batches.includes(student.batchId))
+        throw new ForbiddenException("Student is outside assigned batches.");
     }
   }
 
   private async allowedSubjectIds(user: AuthenticatedUser, collegeId: string) {
     if (user.role !== Role.FACULTY) return [];
-    const assignments = await this.prisma.subjectAssignment.findMany({ where: { collegeId, userId: user.id, status: EntityStatus.ACTIVE }, select: { subjectId: true } });
+    const assignments = await this.prisma.subjectAssignment.findMany({
+      where: { collegeId, userId: user.id, status: EntityStatus.ACTIVE },
+      select: { subjectId: true },
+    });
     return assignments.map((item) => item.subjectId);
   }
 
   private async assignedBatchIds(user: AuthenticatedUser, collegeId: string) {
     if (user.role !== Role.FACULTY) return [];
-    const assignments = await this.prisma.subjectAssignment.findMany({ where: { collegeId, userId: user.id, status: EntityStatus.ACTIVE }, select: { batchId: true } });
+    const assignments = await this.prisma.subjectAssignment.findMany({
+      where: { collegeId, userId: user.id, status: EntityStatus.ACTIVE },
+      select: { batchId: true },
+    });
     return Array.from(new Set(assignments.map((item) => item.batchId)));
   }
 
@@ -1016,16 +1738,25 @@ export class AnalyticsService {
   }
 
   private async assignedStudentCount(collegeId: string) {
-    return this.prisma.studentProfile.count({ where: { collegeId, status: EntityStatus.ACTIVE } });
+    return this.prisma.studentProfile.count({
+      where: { collegeId, status: EntityStatus.ACTIVE },
+    });
   }
 
   private async assessmentAssignedCount(assessmentId: string) {
     const [direct, batches] = await Promise.all([
-      this.prisma.assessmentStudentAssignment.count({ where: { assessmentId } }),
-      this.prisma.assessmentBatchAssignment.findMany({ where: { assessmentId }, select: { batchId: true } }),
+      this.prisma.assessmentStudentAssignment.count({
+        where: { assessmentId },
+      }),
+      this.prisma.assessmentBatchAssignment.findMany({
+        where: { assessmentId },
+        select: { batchId: true },
+      }),
     ]);
     const batchStudents = batches.length
-      ? await this.prisma.studentProfile.count({ where: { batchId: { in: batches.map((item) => item.batchId) } } })
+      ? await this.prisma.studentProfile.count({
+          where: { batchId: { in: batches.map((item) => item.batchId) } },
+        })
       : 0;
     return direct + batchStudents;
   }
@@ -1036,34 +1767,58 @@ export class AnalyticsService {
       include: { assessment: { include: { subject: true } } },
       take: 100,
     });
-    return rows.map((row) => ({ subject: row.assessment.subject?.subjectName ?? "Unassigned", percentage: row.percentage }));
+    return rows.map((row) => ({
+      subject: row.assessment.subject?.subjectName ?? "Unassigned",
+      percentage: row.percentage,
+    }));
   }
 
   private async studentTopicScores(studentId: string) {
     const answers = await this.prisma.attemptQuestion.findMany({
       where: { attempt: { studentId, result: { isPublished: true } } },
-      include: { assessmentQuestion: { include: { question: true } }, evaluations: true },
+      include: {
+        assessmentQuestion: { include: { question: true } },
+        evaluations: true,
+      },
       take: 200,
     });
     const grouped = new Map<string, number[]>();
     for (const item of answers) {
       const topic = item.assessmentQuestion?.question.topic ?? "Unclassified";
-      const percent = this.percent(this.sum(item.evaluations.map((evaluation) => evaluation.awardedMarks)), item.assignedMarks);
+      const percent = this.percent(
+        this.sum(item.evaluations.map((evaluation) => evaluation.awardedMarks)),
+        item.assignedMarks,
+      );
       grouped.set(topic, [...(grouped.get(topic) ?? []), percent]);
     }
-    return Array.from(grouped.entries()).map(([topic, values]) => ({ topic, average: this.average(values) }));
+    return Array.from(grouped.entries()).map(([topic, values]) => ({
+      topic,
+      average: this.average(values),
+    }));
   }
 
   private async questionDistributions(collegeId: string, subjectId: string) {
-    const questions = await this.prisma.question.findMany({ where: { collegeId, subjectId, deletedAt: null }, select: { difficulty: true, questionType: true, metadata: true } });
+    const questions = await this.prisma.question.findMany({
+      where: { collegeId, subjectId, deletedAt: null },
+      select: { difficulty: true, questionType: true, metadata: true },
+    });
     return {
-      bloom: this.countLabels(questions.map((item) => this.metadataLabel(item.metadata, "bloomLevel", "UNCLASSIFIED"))),
+      bloom: this.countLabels(
+        questions.map((item) =>
+          this.metadataLabel(item.metadata, "bloomLevel", "UNCLASSIFIED"),
+        ),
+      ),
       difficulty: this.countLabels(questions.map((item) => item.difficulty)),
-      questionType: this.countLabels(questions.map((item) => item.questionType ?? "UNKNOWN")),
+      questionType: this.countLabels(
+        questions.map((item) => item.questionType ?? "UNKNOWN"),
+      ),
     };
   }
 
-  private measuredDifficulty(correctRate: number, sampleSize: number): QuestionDifficulty | null {
+  private measuredDifficulty(
+    correctRate: number,
+    sampleSize: number,
+  ): QuestionDifficulty | null {
     if (sampleSize < minStatsSample) return null;
     if (correctRate >= 75) return QuestionDifficulty.EASY;
     if (correctRate >= 40) return QuestionDifficulty.MEDIUM;
@@ -1071,16 +1826,28 @@ export class AnalyticsService {
   }
 
   private questionSource(metadata: Prisma.JsonValue | null) {
-    if (metadata && typeof metadata === "object" && !Array.isArray(metadata) && "source" in metadata) return metadata.source;
+    if (
+      metadata &&
+      typeof metadata === "object" &&
+      !Array.isArray(metadata) &&
+      "source" in metadata
+    )
+      return metadata.source;
     return "manual";
   }
 
-  private metadataLabel(metadata: Prisma.JsonValue | null, key: string, fallback: string) {
+  private metadataLabel(
+    metadata: Prisma.JsonValue | null,
+    key: string,
+    fallback: string,
+  ) {
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
       return fallback;
     }
     const value = (metadata as Record<string, unknown>)[key];
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    return typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
       ? String(value)
       : fallback;
   }
@@ -1098,7 +1865,9 @@ export class AnalyticsService {
   }
 
   private average(values: number[]) {
-    return values.length ? Number((this.sum(values) / values.length).toFixed(2)) : 0;
+    return values.length
+      ? Number((this.sum(values) / values.length).toFixed(2))
+      : 0;
   }
 
   private sum(values: number[]) {
@@ -1106,12 +1875,20 @@ export class AnalyticsService {
   }
 
   private timeStats(results: NumericResult[]) {
-    const values = results.map((item) => item.timeTakenSeconds ?? 0).filter((value) => value > 0);
-    return { averageSeconds: this.average(values), fastestSeconds: Math.min(...values, 0), slowestSeconds: Math.max(...values, 0) };
+    const values = results
+      .map((item) => item.timeTakenSeconds ?? 0)
+      .filter((value) => value > 0);
+    return {
+      averageSeconds: this.average(values),
+      fastestSeconds: Math.min(...values, 0),
+      slowestSeconds: Math.max(...values, 0),
+    };
   }
 
   private trendFromDates(dates: Date[]) {
-    return Object.entries(this.countLabels(dates.map((date) => date.toISOString().slice(0, 10)))).map(([date, value]) => ({ date, value }));
+    return Object.entries(
+      this.countLabels(dates.map((date) => date.toISOString().slice(0, 10))),
+    ).map(([date, value]) => ({ date, value }));
   }
 
   private anonymousName(rank: number) {
@@ -1126,9 +1903,11 @@ export class AnalyticsService {
     return {
       enabled: false,
       method: "Transparent rule-based baseline only.",
-      warning: "No punitive or high-stakes action may be taken solely from a prediction.",
+      warning:
+        "No punitive or high-stakes action may be taken solely from a prediction.",
       minimumDataThreshold: minStatsSample,
-      fairness: "Requires bias, calibration, and validity review before production use.",
+      fairness:
+        "Requires bias, calibration, and validity review before production use.",
     };
   }
 
@@ -1141,7 +1920,12 @@ export class AnalyticsService {
     }
   }
 
-  private async cached<T>(user: AuthenticatedUser, key: string, query: AnalyticsQueryDto, factory: () => Promise<T>) {
+  private async cached<T>(
+    user: AuthenticatedUser,
+    key: string,
+    query: AnalyticsQueryDto,
+    factory: () => Promise<T>,
+  ) {
     const cacheKey = `analytics:${user.role}:${user.collegeId ?? "platform"}:${key}:${JSON.stringify(query)}`;
     if (process.env.ANALYTICS_CACHE_BYPASS === "true") return factory();
     try {
@@ -1155,10 +1939,24 @@ export class AnalyticsService {
     }
   }
 
-  private async audit(user: AuthenticatedUser, event: AuditEvent, collegeId: string | null, message: string, metadata: Prisma.InputJsonObject) {
-    await this.prisma.auditLog.create({
-      data: { userId: user.id, collegeId, event, actorRole: user.role, metadata: { ...metadata, message } },
-    }).catch(() => undefined);
+  private async audit(
+    user: AuthenticatedUser,
+    event: AuditEvent,
+    collegeId: string | null,
+    message: string,
+    metadata: Prisma.InputJsonObject,
+  ) {
+    await this.prisma.auditLog
+      .create({
+        data: {
+          userId: user.id,
+          collegeId,
+          event,
+          actorRole: user.role,
+          metadata: { ...metadata, message },
+        },
+      })
+      .catch(() => undefined);
   }
 
   private ok<T>(data: T) {
