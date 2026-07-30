@@ -9,6 +9,7 @@ import { QuestionBankService } from "../src/modules/question-bank/question-bank.
 
 const collegeId = "college-1";
 const assessmentId = "assessment-1";
+const subjectId = "python-subject";
 
 const user = {
   id: "admin-1",
@@ -20,39 +21,58 @@ const user = {
   collegeName: "Demo College",
 };
 
+interface SectionRow {
+  id: string;
+  assessmentId: string;
+  marksRule: { sectionMarks: number };
+  name: string;
+  displayOrder: number;
+}
+
+interface AssessmentQuestionRow {
+  id: string;
+  assessmentId: string;
+  sectionId: string | null;
+  questionId: string;
+  assignedMarks: number;
+  assignedNegativeMarks: number;
+  displayOrder: number;
+  mandatory: boolean;
+  question?: {
+    id: string;
+    title: string;
+    status: QuestionStatus;
+    questionType: QuestionType;
+  };
+}
+
 async function main(): Promise<void> {
   let recalculatedTotalMarks = 0;
+  const sections: SectionRow[] = [];
+  const assessmentQuestions: AssessmentQuestionRow[] = [];
   const assessment = {
     id: assessmentId,
     collegeId,
-    title: "Python Assessment",
-    subjectId: "subject-1",
+    title: "Python Unit Test 1",
+    subjectId,
     passingMarks: 20,
     totalMarks: 0,
-    assessmentQuestions: [
-      {
-        id: "assessment-question-1",
-        sectionId: "section-1",
-        assignedMarks: 1,
-        question: {
-          id: "question-1",
-          title: "Python MCQ",
-          status: QuestionStatus.ACTIVE,
-          questionType: QuestionType.SINGLE_CHOICE,
-        },
-      },
-    ],
-    sections: [
-      {
-        id: "section-1",
-        marksRule: { sectionMarks: 50 },
-      },
-    ],
+    sections,
+    assessmentQuestions,
     batchAssignments: [{ id: "batch-assignment-1" }],
     studentAssignments: [],
     assignments: [],
     startAt: null,
     endAt: null,
+  };
+  const question = {
+    id: "question-1",
+    collegeId,
+    subjectId,
+    title: "Python MCQ",
+    status: QuestionStatus.ACTIVE,
+    questionType: QuestionType.SINGLE_CHOICE,
+    defaultMarks: 1,
   };
   const service = new QuestionBankService({
     assessment: {
@@ -61,12 +81,64 @@ async function main(): Promise<void> {
       update: async (args: { data: { totalMarks?: number; status?: AssessmentStatus } }) => {
         if (typeof args.data.totalMarks === "number") {
           recalculatedTotalMarks = args.data.totalMarks;
+          assessment.totalMarks = args.data.totalMarks;
         }
         return { ...assessment, ...args.data };
       },
     },
+    assessmentSection: {
+      create: async (args: { data: Omit<SectionRow, "id"> }) => {
+        const section = { id: "section-1", ...args.data };
+        sections.push(section);
+        return section;
+      },
+      update: async (args: { data: Partial<SectionRow> }) => {
+        const section = sections[0];
+        assert(section);
+        Object.assign(section, args.data);
+        return section;
+      },
+    },
+    assessmentQuestion: {
+      create: async (args: { data: Omit<AssessmentQuestionRow, "id" | "question"> }) => {
+        const row = {
+          id: "assessment-question-1",
+          ...args.data,
+          question,
+        };
+        assessmentQuestions.push(row);
+        return row;
+      },
+      updateMany: async () => ({ count: 0 }),
+    },
+    question: {
+      findFirst: async () => question,
+    },
     auditLog: { create: async () => ({ id: "audit-1" }) },
   } as never);
+
+  const createdSection = await service.addSection(user, assessmentId, {
+    name: "Section A",
+    marks: 0,
+    displayOrder: 1,
+  });
+  await service.updateSection(user, assessmentId, createdSection.data.id, {
+    name: "Section A",
+    marks: 50,
+    displayOrder: 1,
+  });
+  assert.equal(sections[0]?.marksRule.sectionMarks, 50);
+
+  await service.addAssessmentQuestion(user, assessmentId, {
+    questionId: question.id,
+    sectionId: createdSection.data.id,
+    displayOrder: 1,
+    assignedMarks: question.defaultMarks,
+    assignedNegativeMarks: 0,
+    mandatory: true,
+  });
+  assert.equal(assessmentQuestions.length, 1);
+  assert.equal(assessmentQuestions[0]?.sectionId, createdSection.data.id);
 
   const result = await service.publishAssessment(user, assessmentId);
 

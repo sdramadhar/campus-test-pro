@@ -22,6 +22,9 @@ function main(): void {
   assert(source.includes("Continue to Step 3"));
   assert(source.includes("sectionId"));
   assert(source.includes("Save Section"));
+  assert(source.includes("persistAllSections"));
+  assert(source.includes("await persistSection(sectionId)"));
+  assert(source.includes("await persistAllSections();"));
   assert(source.includes("questionLabel(question)"));
   assert(source.includes("No active questions found for"));
   assert(source.includes("Returned question count"));

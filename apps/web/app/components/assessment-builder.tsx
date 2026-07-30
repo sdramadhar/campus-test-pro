@@ -363,6 +363,13 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
   }
 
   async function saveSection(sectionId: string): Promise<void> {
+    await persistSection(sectionId, true);
+  }
+
+  async function persistSection(
+    sectionId: string,
+    showMessage = false,
+  ): Promise<void> {
     if (!assessment?.id) return;
     const draft = sectionDrafts[sectionId];
     if (!draft) return;
@@ -378,12 +385,23 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
         }),
       },
     );
-    setMessage("Section saved.");
+    if (showMessage) setMessage("Section saved.");
     await reloadAssessment();
+  }
+
+  async function persistAllSections(): Promise<void> {
+    if (!assessment?.id) return;
+    const sections = (assessment.sections as EntityRecord[] | undefined) ?? [];
+    for (const section of sections) {
+      await persistSection(section.id);
+    }
   }
 
   async function addQuestion(questionId: string, sectionId?: string): Promise<void> {
     if (!assessment?.id) return;
+    if (sectionId) {
+      await persistSection(sectionId);
+    }
     const selectedQuestion = questions.find((question) => question.id === questionId);
     const assignedMarks = Number(
       selectedQuestion?.defaultMarks ?? selectedQuestion?.marks ?? 1,
@@ -441,6 +459,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
   async function publish(): Promise<void> {
     if (!assessment?.id) return;
     try {
+      await persistAllSections();
       await academicRequest(`/api/v1/assessments/${assessment.id}/publish`, {
         method: "POST",
       });
@@ -572,9 +591,10 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
               ((assessment?.sections as EntityRecord[] | undefined) ?? [])
                 .length === 0 || attachedQuestionCount === 0
             }
-            onClick={() => {
+            onClick={() => void (async () => {
+              await persistAllSections();
               setStep(3);
-            }}
+            })()}
             type="button"
           >
             Continue to Step 3
