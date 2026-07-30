@@ -65,6 +65,17 @@ interface QuestionOptionsDebug {
   status: string;
 }
 
+interface QuestionImportSet {
+  id: string;
+  name: string;
+  fileName?: string | null;
+  subjectId: string;
+  questionCount: number;
+  importedAt?: string | null;
+  status: string;
+  legacy: boolean;
+}
+
 export function AssessmentList() {
   const [rows, setRows] = useState<EntityRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -173,6 +184,9 @@ export function AssessmentList() {
 export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
   const [subjects, setSubjects] = useState<EntityRecord[]>([]);
   const [questions, setQuestions] = useState<EntityRecord[]>([]);
+  const [questionImportSets, setQuestionImportSets] = useState<
+    QuestionImportSet[]
+  >([]);
   const [batches, setBatches] = useState<EntityRecord[]>([]);
   const [students, setStudents] = useState<EntityRecord[]>([]);
   const [assessment, setAssessment] = useState<EntityRecord | null>(null);
@@ -227,8 +241,14 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
       assessmentSubjectId || selectedSubjectId;
     if (assessment?.id) {
       const endpoint = `/api/v1/assessments/${assessment.id}/question-options`;
-      const response = await academicRequest<QuestionOptionsResponse>(endpoint);
+      const [response, importSetResponse] = await Promise.all([
+        academicRequest<QuestionOptionsResponse>(endpoint),
+        academicRequest<{ success: true; data: QuestionImportSet[] }>(
+          `/api/v1/assessments/${assessment.id}/question-import-sets`,
+        ),
+      ]);
       setQuestions(response.data);
+      setQuestionImportSets(importSetResponse.data);
       setQuestionDebug({
         endpoint,
         selectedSubjectId:
@@ -252,6 +272,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     const endpoint = `/api/v1/questions?${query.toString()}`;
     const response = await academicRequest<ListResponse>(endpoint);
     setQuestions(response.data);
+    setQuestionImportSets([]);
     setQuestionDebug({
       endpoint,
       selectedSubjectId: effectiveSubjectId,
@@ -259,6 +280,18 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
       status: "ACTIVE",
     });
   }, [assessment, selectedSubjectId]);
+
+  useEffect(() => {
+    const refreshQuestionData = () => {
+      void loadQuestionOptions();
+    };
+    window.addEventListener("focus", refreshQuestionData);
+    window.addEventListener("storage", refreshQuestionData);
+    return () => {
+      window.removeEventListener("focus", refreshQuestionData);
+      window.removeEventListener("storage", refreshQuestionData);
+    };
+  }, [loadQuestionOptions]);
 
   useEffect(() => {
     loadQuestionOptions().catch((error: unknown) => {
@@ -432,6 +465,31 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
     await loadQuestionOptions();
   }
 
+  async function addImportSet(
+    importSetId: string,
+    sectionId?: string,
+  ): Promise<void> {
+    if (!assessment?.id) return;
+    if (sectionId) {
+      await persistSection(sectionId);
+    }
+    const response = await academicRequest<{
+      success: true;
+      data: { attachedCount: number; skippedCount: number };
+    }>(
+      `/api/v1/assessments/${assessment.id}/question-import-sets/${importSetId}/questions`,
+      {
+        method: "POST",
+        body: JSON.stringify({ sectionId }),
+      },
+    );
+    setMessage(
+      `Attached ${String(response.data.attachedCount)} question(s) from import set. Skipped ${String(response.data.skippedCount)} already attached.`,
+    );
+    await reloadAssessment();
+    await loadQuestionOptions();
+  }
+
   async function assignBatch(batchId: string): Promise<void> {
     if (!assessment?.id) return;
     await academicRequest(`/api/v1/assessments/${assessment.id}/assignments`, {
@@ -593,6 +651,9 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
             onAddQuestion={(questionId, sectionId) =>
               void addQuestion(questionId, sectionId)
             }
+            onAddImportSet={(importSetId, sectionId) =>
+              void addImportSet(importSetId, sectionId)
+            }
             onDraftChange={(sectionId, next) => {
               setSectionDrafts((current) => ({
                 ...current,
@@ -607,6 +668,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
               void loadQuestionOptions();
             }}
             questionDebug={questionDebug}
+            questionImportSets={questionImportSets}
             questions={questions}
             subjectName={selectedSubjectName(subjects, selectedSubjectId)}
           />
@@ -740,7 +802,9 @@ function SectionEditor({
   assessment,
   drafts,
   expandedSectionId,
+  questionImportSets,
   onAddQuestion,
+  onAddImportSet,
   onDraftChange,
   onSaveSection,
   onToggle,
@@ -751,7 +815,9 @@ function SectionEditor({
   assessment: EntityRecord | null;
   drafts: Record<string, SectionDraft>;
   expandedSectionId: string | null;
+  questionImportSets: QuestionImportSet[];
   onAddQuestion: (questionId: string, sectionId: string) => void;
+  onAddImportSet: (importSetId: string, sectionId: string) => void;
   onDraftChange: (sectionId: string, next: SectionDraft) => void;
   onSaveSection: (sectionId: string) => void;
   onToggle: (sectionId: string) => void;
@@ -844,7 +910,7 @@ function SectionEditor({
                     />
                   </label>
                   <label className="form-field wide-field">
-                    Question
+                    Question Bank or Question
                     <select
                       onChange={(event) => {
                         onDraftChange(section.id, {
@@ -854,18 +920,35 @@ function SectionEditor({
                       }}
                       value={draft.questionId}
                     >
-                  <option value="">Select a question</option>
-                      {questions.map((question) => (
-                        <option key={question.id} value={question.id}>
-                          {questionLabel(question)}
-                        </option>
-                      ))}
+                      <option value="">Select a question bank or question</option>
+                      {questionImportSets.length > 0 && (
+                        <optgroup label="Imported question banks">
+                          {questionImportSets.map((importSet) => (
+                            <option
+                              key={importSet.id}
+                              value={`import:${importSet.id}`}
+                            >
+                              {importSet.name} ({String(importSet.questionCount)} questions)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {questions.length > 0 && (
+                        <optgroup label="Individual active questions">
+                          {questions.map((question) => (
+                            <option key={question.id} value={`question:${question.id}`}>
+                              {questionLabel(question)}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   </label>
                 </div>
-                {questions.length === 0 && (
+                {questions.length === 0 && questionImportSets.length === 0 && (
                   <div className="form-alert">
-                    No active questions found for {subjectName || "this subject"}.
+                    No active questions or imported question banks found for{" "}
+                    {subjectName || "this subject"}.
                     Selected subject ID: {questionDebug.selectedSubjectId || "-"}.
                     Endpoint: {questionDebug.endpoint}. Returned question count:{" "}
                     {String(questionDebug.returnedQuestionCount)}.{" "}
@@ -886,7 +969,17 @@ function SectionEditor({
                     disabled={!draft.questionId}
                     onClick={() => {
                       if (!draft.questionId) return;
-                      onAddQuestion(draft.questionId, section.id);
+                      if (draft.questionId.startsWith("import:")) {
+                        onAddImportSet(
+                          draft.questionId.replace(/^import:/, ""),
+                          section.id,
+                        );
+                      } else {
+                        onAddQuestion(
+                          draft.questionId.replace(/^question:/, ""),
+                          section.id,
+                        );
+                      }
                       onDraftChange(section.id, { ...draft, questionId: "" });
                     }}
                     type="button"

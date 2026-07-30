@@ -20,6 +20,7 @@ import {
 interface ImportJobResponse {
   success: true;
   data: {
+    id: string;
     totalRows: number;
     successCount: number;
     failureCount: number;
@@ -33,6 +34,7 @@ export default function QuestionImportPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [existingQuestionTexts, setExistingQuestionTexts] = useState<string[]>([]);
   const [preview, setPreview] = useState<QuestionImportParseResult | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState("");
   const [payload, setPayload] = useState('{"rows":[]}');
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "importing">("idle");
@@ -136,6 +138,7 @@ export default function QuestionImportPage() {
         selectedSubjectId,
         existingQuestionTexts,
       );
+      setUploadedFileName(file.name);
       setPreview(parsed);
       setPayload(JSON.stringify(parsed.payload, null, 2));
       setMessage(
@@ -143,6 +146,7 @@ export default function QuestionImportPage() {
       );
     } catch (error) {
       setPreview(null);
+      setUploadedFileName("");
       setMessage(error instanceof Error ? error.message : "Unable to parse file.");
     }
   }
@@ -158,10 +162,17 @@ export default function QuestionImportPage() {
         "/api/v1/questions/import",
         {
           method: "POST",
-          body: JSON.stringify(preview.payload),
+          body: JSON.stringify({
+            ...preview.payload,
+            fileName: uploadedFileName,
+          }),
         },
       );
       await loadExistingQuestions(selectedSubjectId);
+      window.localStorage.setItem(
+        "campustest-question-import-updated",
+        `${response.data.id}:${Date.now().toString()}`,
+      );
       window.sessionStorage.setItem(
         "campustest-question-toast",
         `Imported ${String(response.data.successCount)} question(s).`,

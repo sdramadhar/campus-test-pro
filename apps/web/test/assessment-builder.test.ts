@@ -12,6 +12,13 @@ function main(): void {
   assert(source.includes("expandedSectionId"));
   assert(source.includes("selectedSubjectId"));
   assert(source.includes("/question-options"));
+  assert(source.includes("/question-import-sets"));
+  assert(source.includes("Question Bank or Question"));
+  assert(source.includes("Imported question banks"));
+  assert(source.includes("Select a question bank or question"));
+  assert(source.includes("onAddImportSet"));
+  assert(source.includes("startsWith(\"import:\")"));
+  assert(source.includes("questionImportSets"));
   assert(source.includes('query.set("subjectId", selectedSubjectId)'));
   assert(source.includes("attachedQuestionCount"));
   assert(source.includes("Section Name"));
@@ -26,7 +33,7 @@ function main(): void {
   assert(source.includes("await persistSection(sectionId)"));
   assert(source.includes("await persistAllSections();"));
   assert(source.includes("questionLabel(question)"));
-  assert(source.includes("No active questions found for"));
+  assert(source.includes("No active questions or imported question banks found for"));
   assert(source.includes("Returned question count"));
   assert(source.includes("Open Question Bank"));
 

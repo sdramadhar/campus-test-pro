@@ -883,6 +883,7 @@ model Subject {
   semester           Semester              @relation(fields: [semesterId], references: [id], onDelete: Cascade)
   assignments        SubjectAssignment[]
   questions          Question[]
+  questionImportJobs QuestionImportJob[]
   assessmentsBuilt   Assessment[]
   aiGenerationJobs   AiGenerationJob[]
   documentImportJobs DocumentImportJob[]
@@ -1110,6 +1111,8 @@ model Question {
   codingQuestion       CodingQuestion?
   attachments          QuestionAttachment[]
   assessmentQuestions  AssessmentQuestion[]
+  importJobId          String?
+  importJob            QuestionImportJob?            @relation(fields: [importJobId], references: [id], onDelete: SetNull)
   aiGenerationResults  AiGenerationResult[]
   extractedCandidates  ExtractedQuestionCandidate[]
   duplicateMatches     QuestionDuplicateCandidate[] @relation("DuplicateExistingQuestion")
@@ -1127,6 +1130,7 @@ model Question {
   @@index([status])
   @@index([createdById])
   @@index([deletedAt])
+  @@index([importJobId])
 }
 
 model QuestionOption {
@@ -1539,18 +1543,22 @@ model QuestionImportJob {
   id           String                @id @default(cuid())
   collegeId    String
   createdById  String
+  subjectId    String?
+  subject      Subject?              @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   fileName     String?
   status       String                @default("COMPLETED")
   totalRows    Int                   @default(0)
   successCount Int                   @default(0)
   failureCount Int                   @default(0)
   preview      Json?
+  questions    Question[]
   errors       QuestionImportError[]
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
 
   @@index([collegeId])
   @@index([createdById])
+  @@index([subjectId])
 }
 
 model QuestionImportError {

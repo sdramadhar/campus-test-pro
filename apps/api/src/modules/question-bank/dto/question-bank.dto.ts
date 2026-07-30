@@ -319,6 +319,11 @@ export class ImportQuestionsDto {
   @IsString()
   collegeId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
   @ApiProperty({ type: [CreateQuestionDto] })
   @IsArray()
   rows!: CreateQuestionDto[];
@@ -460,6 +465,13 @@ export class AssessmentQuestionDto {
   @IsOptional()
   @IsBoolean()
   mandatory?: boolean;
+}
+
+export class AssessmentImportSetDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sectionId?: string;
 }
 
 export class AssessmentAssignmentDto {

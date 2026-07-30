@@ -25,6 +25,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import {
   AssessmentAssignmentDto,
+  AssessmentImportSetDto,
   AssessmentQuestionDto,
   AssessmentSectionDto,
   BankListQueryDto,
@@ -179,6 +180,14 @@ export class AssessmentsController extends QuestionBankBaseController {
     return this.service.assessmentQuestionOptions(user, id);
   }
 
+  @Get(":id/question-import-sets")
+  questionImportSets(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ) {
+    return this.service.assessmentQuestionImportSets(user, id);
+  }
+
   @Patch(":id")
   update(
     @CurrentUser() user: AuthenticatedUser,
@@ -230,6 +239,16 @@ export class AssessmentsController extends QuestionBankBaseController {
     @Body() dto: AssessmentQuestionDto,
   ) {
     return this.service.addAssessmentQuestion(user, id, dto);
+  }
+
+  @Post(":id/question-import-sets/:jobId/questions")
+  addImportSetQuestions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Param("jobId") jobId: string,
+    @Body() dto: AssessmentImportSetDto,
+  ) {
+    return this.service.addAssessmentImportSetQuestions(user, id, jobId, dto);
   }
 
   @Delete(":id/questions/:questionId")

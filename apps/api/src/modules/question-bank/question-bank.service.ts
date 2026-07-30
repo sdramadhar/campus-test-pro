@@ -19,6 +19,7 @@ import { AuthenticatedUser } from "../auth/auth.types";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AssessmentAssignmentDto,
+  AssessmentImportSetDto,
   AssessmentQuestionDto,
   AssessmentSectionDto,
   BankListQueryDto,
@@ -450,6 +451,20 @@ export class QuestionBankService {
 
   async importQuestions(user: TenantUser, dto: ImportQuestionsDto) {
     const collegeId = this.scopeCollege(user, dto.collegeId, true);
+    const subjectId = dto.rows[0]?.subjectId;
+    if (subjectId) {
+      await this.ensureSubjectAccess(user, collegeId, subjectId);
+    }
+    const job = await this.prisma.questionImportJob.create({
+      data: {
+        collegeId,
+        createdById: user.id,
+        subjectId,
+        fileName: this.optional(dto.fileName),
+        totalRows: dto.rows.length,
+        preview: dto.rows.slice(0, 5) as unknown as Prisma.InputJsonValue,
+      },
+    });
     const errors: Array<{
       rowNumber: number;
       message: string;
@@ -464,7 +479,11 @@ export class QuestionBankService {
           collegeId,
           status: row.status ?? QuestionStatus.DRAFT,
         });
-        await this.createQuestion(user, importRow);
+        const created = await this.createQuestion(user, importRow);
+        await this.prisma.question.update({
+          where: { id: created.data.id },
+          data: { importJobId: job.id },
+        });
         successCount += 1;
       } catch (error) {
         errors.push({
@@ -474,20 +493,18 @@ export class QuestionBankService {
         });
       }
     }
-    const job = await this.prisma.questionImportJob.create({
+    const updatedJob = await this.prisma.questionImportJob.update({
+      where: { id: job.id },
       data: {
-        collegeId,
-        createdById: user.id,
-        totalRows: dto.rows.length,
         successCount,
         failureCount: errors.length,
-        preview: dto.rows.slice(0, 5) as unknown as Prisma.InputJsonValue,
+        status: errors.length > 0 ? "COMPLETED_WITH_ERRORS" : "COMPLETED",
         errors: { create: errors },
       },
       include: { errors: true },
     });
     await this.audit(user, collegeId, AuditEvent.QUESTION_IMPORT);
-    return { success: true, data: job };
+    return { success: true, data: updatedJob };
   }
 
   importTemplate() {
@@ -587,6 +604,158 @@ export class QuestionBankService {
         endpoint: `/api/v1/assessments/${assessment.id}/question-options`,
         status: "ACTIVE",
         returnedQuestionCount: questions.length,
+      },
+    };
+  }
+
+  async assessmentQuestionImportSets(user: TenantUser, assessmentId: string) {
+    const assessment = await this.findAssessment(user, assessmentId);
+    const collegeId = assessment.collegeId ?? "";
+    const subjectId = assessment.subjectId;
+    if (!subjectId) {
+      return {
+        success: true,
+        data: [],
+        debug: {
+          assessmentId: assessment.id,
+          selectedSubjectId: null,
+          returnedImportSetCount: 0,
+        },
+      };
+    }
+    const jobs = await this.prisma.questionImportJob.findMany({
+      where: {
+        collegeId,
+        subjectId,
+        status: { in: ["COMPLETED", "COMPLETED_WITH_ERRORS"] },
+        questions: {
+          some: {
+            ...this.questionScopeWhere(user, collegeId),
+            deletedAt: null,
+            status: QuestionStatus.ACTIVE,
+            subjectId,
+          },
+        },
+      },
+      include: {
+        subject: true,
+        questions: {
+          where: {
+            ...this.questionScopeWhere(user, collegeId),
+            deletedAt: null,
+            status: QuestionStatus.ACTIVE,
+            subjectId,
+          },
+          select: { id: true },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const legacyCount = await this.prisma.question.count({
+      where: this.legacyImportedQuestionWhere(user, collegeId, subjectId),
+    });
+    const mapped: Array<{
+      id: string;
+      name: string;
+      fileName: string | null;
+      subjectId: string;
+      questionCount: number;
+      importedAt: Date | null;
+      status: string;
+      legacy: boolean;
+    }> = jobs.map((job, index) => ({
+      id: job.id,
+      name: this.importSetName(
+        job.fileName,
+        job.subject?.subjectName ?? "Question Bank",
+        index + 1,
+      ),
+      fileName: job.fileName,
+      subjectId: job.subjectId ?? subjectId,
+      questionCount: job.questions.length,
+      importedAt: job.createdAt,
+      status: job.status,
+      legacy: false,
+    }));
+    if (legacyCount > 0) {
+      mapped.unshift({
+        id: this.legacyImportSetId(subjectId),
+        name: "Legacy imported questions",
+        fileName: null,
+        subjectId,
+        questionCount: legacyCount,
+        importedAt: null,
+        status: "COMPLETED",
+        legacy: true,
+      });
+    }
+    return {
+      success: true,
+      data: mapped.reverse(),
+      debug: {
+        assessmentId: assessment.id,
+        selectedSubjectId: subjectId,
+        returnedImportSetCount: mapped.length,
+      },
+    };
+  }
+
+  async addAssessmentImportSetQuestions(
+    user: TenantUser,
+    assessmentId: string,
+    jobId: string,
+    dto: AssessmentImportSetDto,
+  ) {
+    const assessment = await this.findAssessment(user, assessmentId);
+    const collegeId = assessment.collegeId ?? "";
+    if (!assessment.subjectId) {
+      throw new BadRequestException(
+        "Select an assessment subject before attaching an import set.",
+      );
+    }
+    if (dto.sectionId) {
+      const section = await this.prisma.assessmentSection.findFirst({
+        where: { id: dto.sectionId, assessmentId },
+      });
+      if (!section) throw new NotFoundException("Section not found.");
+    }
+    const questions = jobId.startsWith("legacy-imported-")
+      ? await this.prisma.question.findMany({
+        where: this.legacyImportedQuestionWhere(
+          user,
+          collegeId,
+          assessment.subjectId,
+        ),
+        orderBy: { createdAt: "asc" },
+      })
+      : await this.importSetQuestions(user, collegeId, assessment.subjectId, jobId);
+    if (!questions.length) {
+      throw new NotFoundException("No active questions found for this import set.");
+    }
+    const maxOrder = await this.prisma.assessmentQuestion.aggregate({
+      where: { assessmentId },
+      _max: { displayOrder: true },
+    });
+    const startOrder = (maxOrder._max.displayOrder ?? 0) + 1;
+    const created = await this.prisma.assessmentQuestion.createMany({
+      data: questions.map((question, index) => ({
+        assessmentId,
+        sectionId: dto.sectionId,
+        questionId: question.id,
+        displayOrder: startOrder + index,
+        assignedMarks: question.defaultMarks,
+        assignedNegativeMarks: question.defaultNegativeMarks,
+        mandatory: true,
+      })),
+      skipDuplicates: true,
+    });
+    await this.recalculateAssessmentMarks(assessmentId);
+    return {
+      success: true,
+      data: {
+        importSetId: jobId,
+        attachedCount: created.count,
+        skippedCount: questions.length - created.count,
       },
     };
   }
@@ -1214,6 +1383,64 @@ export class QuestionBankService {
       where: { id: studentProfileId, collegeId },
     });
     if (!item) throw new NotFoundException("Student not found.");
+  }
+
+  private legacyImportSetId(subjectId: string) {
+    return `legacy-imported-${subjectId}`;
+  }
+
+  private importSetName(
+    fileName: string | null,
+    subjectName: string,
+    sequence: number,
+  ) {
+    if (fileName?.trim()) {
+      return fileName.replace(/\.[^.]+$/, "").trim();
+    }
+    return `${subjectName} Test ${sequence.toString()}`;
+  }
+
+  private legacyImportedQuestionWhere(
+    user: TenantUser,
+    collegeId: string,
+    subjectId: string,
+  ): Prisma.QuestionWhereInput {
+    return {
+      ...this.questionScopeWhere(user, collegeId),
+      deletedAt: null,
+      status: QuestionStatus.ACTIVE,
+      subjectId,
+      importJobId: null,
+      metadata: { path: ["importedFrom"], equals: "question-import" },
+    };
+  }
+
+  private async importSetQuestions(
+    user: TenantUser,
+    collegeId: string,
+    subjectId: string | null,
+    jobId: string,
+  ) {
+    const job = await this.prisma.questionImportJob.findFirst({
+      where: {
+        id: jobId,
+        collegeId,
+        ...(subjectId ? { subjectId } : {}),
+      },
+      include: {
+        questions: {
+          where: {
+            ...this.questionScopeWhere(user, collegeId),
+            deletedAt: null,
+            status: QuestionStatus.ACTIVE,
+            ...(subjectId ? { subjectId } : {}),
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    if (!job) throw new NotFoundException("Question import set not found.");
+    return job.questions;
   }
 
   private async recalculateAssessmentMarks(
