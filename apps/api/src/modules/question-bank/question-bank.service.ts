@@ -488,7 +488,6 @@ export class QuestionBankService {
       data: {
         format: "CSV/XLSX compatible columns",
         columns: [
-          "subjectId",
           "topic",
           "title",
           "questionText",
@@ -496,12 +495,16 @@ export class QuestionBankService {
           "difficulty",
           "defaultMarks",
           "defaultNegativeMarks",
-          "optionsJson",
-          "metadataJson",
+          "optionA",
+          "optionB",
+          "optionC",
+          "optionD",
+          "correctOption",
+          "explanation",
           "tags",
         ],
         instructions:
-          "Use rows payload for API imports. XLSX parsing is represented by this strict row schema; no untrusted files are executed.",
+          "Select the subject in the UI. Files must contain one SINGLE_CHOICE question per row with options A-D and correctOption A, B, C, or D. Spreadsheet formulas and macros are not executed.",
       },
     };
   }
