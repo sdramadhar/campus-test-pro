@@ -36,7 +36,7 @@ export interface QuestionImportRowPayload {
   defaultMarks: number;
   defaultNegativeMarks: number;
   explanation?: string;
-  status: "DRAFT";
+  status: "ACTIVE";
   options: QuestionImportOption[];
   tags: string[];
   metadata: { explanation?: string; importedFrom: "question-import" };
@@ -340,7 +340,7 @@ function toQuestionPayload(
     defaultMarks: Number(record.defaultMarks),
     defaultNegativeMarks: Number(record.defaultNegativeMarks),
     explanation,
-    status: "DRAFT",
+    status: "ACTIVE",
     options: ["A", "B", "C", "D"].map((optionKey, index) => ({
       optionKey,
       optionText: record[`option${optionKey}` as QuestionImportColumn] ?? "",

@@ -31,6 +31,10 @@ function main(): void {
 
   assert(service.includes("assessmentQuestionImportSets"));
   assert(service.includes("addAssessmentImportSetQuestions"));
+  assert(service.includes("OR: [{ subjectId }, { subjectId: null }]"));
+  assert(service.includes("derivedQuestionImportSets"));
+  assert(service.includes("inferImportedQuestionGroupName"));
+  assert(service.includes("derived-imported-"));
   assert(service.includes("status: { in: [\"COMPLETED\", \"COMPLETED_WITH_ERRORS\"] }"));
   assert(service.includes("status: QuestionStatus.ACTIVE"));
   assert(service.includes("skipDuplicates: true"));

@@ -49,6 +49,7 @@ function main(): void {
   const importedQuestion = validCsv.payload.rows[0];
   assert(importedQuestion);
   assert.equal(importedQuestion.subjectId, subjectId);
+  assert.equal(importedQuestion.status, "ACTIVE");
   assert.equal(importedQuestion.metadata.explanation, "Because A is correct.");
   assert.deepEqual(importedQuestion.tags, ["python", "basics"]);
 

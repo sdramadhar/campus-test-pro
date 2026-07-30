@@ -286,9 +286,11 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
       void loadQuestionOptions();
     };
     window.addEventListener("focus", refreshQuestionData);
+    document.addEventListener("visibilitychange", refreshQuestionData);
     window.addEventListener("storage", refreshQuestionData);
     return () => {
       window.removeEventListener("focus", refreshQuestionData);
+      document.removeEventListener("visibilitychange", refreshQuestionData);
       window.removeEventListener("storage", refreshQuestionData);
     };
   }, [loadQuestionOptions]);
@@ -828,6 +830,8 @@ function SectionEditor({
   const sections = (assessment?.sections as EntityRecord[] | undefined) ?? [];
   const assignedQuestions =
     (assessment?.assessmentQuestions as EntityRecord[] | undefined) ?? [];
+  const shouldShowIndividualQuestions =
+    questionImportSets.length === 0 && questions.length > 0;
 
   if (sections.length === 0) {
     return <div className="empty-panel">Add a section to start editing.</div>;
@@ -933,7 +937,7 @@ function SectionEditor({
                           ))}
                         </optgroup>
                       )}
-                      {questions.length > 0 && (
+                      {shouldShowIndividualQuestions && (
                         <optgroup label="Individual active questions">
                           {questions.map((question) => (
                             <option key={question.id} value={`question:${question.id}`}>

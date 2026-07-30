@@ -19,6 +19,9 @@ function main(): void {
   assert(source.includes("onAddImportSet"));
   assert(source.includes("startsWith(\"import:\")"));
   assert(source.includes("questionImportSets"));
+  assert(source.includes("shouldShowIndividualQuestions"));
+  assert(source.includes("questionImportSets.length === 0 && questions.length > 0"));
+  assert(source.includes("document.addEventListener(\"visibilitychange\""));
   assert(source.includes('query.set("subjectId", selectedSubjectId)'));
   assert(source.includes("attachedQuestionCount"));
   assert(source.includes("Section Name"));

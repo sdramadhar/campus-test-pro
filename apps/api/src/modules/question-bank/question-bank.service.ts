@@ -626,7 +626,7 @@ export class QuestionBankService {
     const jobs = await this.prisma.questionImportJob.findMany({
       where: {
         collegeId,
-        subjectId,
+        OR: [{ subjectId }, { subjectId: null }],
         status: { in: ["COMPLETED", "COMPLETED_WITH_ERRORS"] },
         questions: {
           some: {
@@ -651,6 +651,13 @@ export class QuestionBankService {
       },
       orderBy: { createdAt: "asc" },
     });
+    const jobIds = new Set(jobs.map((job) => job.id));
+    const derivedQuestionGroups = await this.derivedQuestionImportSets(
+      user,
+      collegeId,
+      subjectId,
+      jobIds,
+    );
     const legacyCount = await this.prisma.question.count({
       where: this.legacyImportedQuestionWhere(user, collegeId, subjectId),
     });
@@ -689,6 +696,7 @@ export class QuestionBankService {
         legacy: true,
       });
     }
+    mapped.push(...derivedQuestionGroups);
     return {
       success: true,
       data: mapped.reverse(),
@@ -721,13 +729,20 @@ export class QuestionBankService {
     }
     const questions = jobId.startsWith("legacy-imported-")
       ? await this.prisma.question.findMany({
-        where: this.legacyImportedQuestionWhere(
-          user,
-          collegeId,
-          assessment.subjectId,
-        ),
-        orderBy: { createdAt: "asc" },
-      })
+          where: this.legacyImportedQuestionWhere(
+            user,
+            collegeId,
+            assessment.subjectId,
+          ),
+          orderBy: { createdAt: "asc" },
+        })
+      : jobId.startsWith("derived-imported-")
+        ? await this.derivedImportSetQuestions(
+            user,
+            collegeId,
+            assessment.subjectId,
+            jobId,
+          )
       : await this.importSetQuestions(user, collegeId, assessment.subjectId, jobId);
     if (!questions.length) {
       throw new NotFoundException("No active questions found for this import set.");
@@ -1389,6 +1404,10 @@ export class QuestionBankService {
     return `legacy-imported-${subjectId}`;
   }
 
+  private derivedImportSetId(subjectId: string, groupName: string) {
+    return `derived-imported-${subjectId}-${this.slug(groupName)}`;
+  }
+
   private importSetName(
     fileName: string | null,
     subjectName: string,
@@ -1398,6 +1417,78 @@ export class QuestionBankService {
       return fileName.replace(/\.[^.]+$/, "").trim();
     }
     return `${subjectName} Test ${sequence.toString()}`;
+  }
+
+  private inferImportedQuestionGroupName(title: string | null): string | null {
+    const trimmed = title?.trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(
+      /^(.+?)\s+(?:MCQ|Question|Q)\s*#?\s*\d+$/i,
+    );
+    return match?.[1]?.trim() || null;
+  }
+
+  private async derivedQuestionImportSets(
+    user: TenantUser,
+    collegeId: string,
+    subjectId: string,
+    knownJobIds: Set<string>,
+  ) {
+    const questions = await this.prisma.question.findMany({
+      where: {
+        ...this.questionScopeWhere(user, collegeId),
+        deletedAt: null,
+        status: QuestionStatus.ACTIVE,
+        subjectId,
+        metadata: { path: ["importedFrom"], equals: "question-import" },
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        importJobId: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const groups = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        fileName: string | null;
+        subjectId: string;
+        questionCount: number;
+        importedAt: Date | null;
+        status: string;
+        legacy: boolean;
+      }
+    >();
+    for (const question of questions) {
+      if (question.importJobId && knownJobIds.has(question.importJobId)) {
+        continue;
+      }
+      if (question.importJobId) continue;
+      const groupName = this.inferImportedQuestionGroupName(question.title);
+      if (!groupName) continue;
+      const id = this.derivedImportSetId(subjectId, groupName);
+      const existing = groups.get(id);
+      if (existing) {
+        existing.questionCount += 1;
+        existing.importedAt = question.createdAt;
+      } else {
+        groups.set(id, {
+          id,
+          name: groupName,
+          fileName: null,
+          subjectId,
+          questionCount: 1,
+          importedAt: question.createdAt,
+          status: "COMPLETED",
+          legacy: true,
+        });
+      }
+    }
+    return Array.from(groups.values());
   }
 
   private legacyImportedQuestionWhere(
@@ -1415,6 +1506,28 @@ export class QuestionBankService {
     };
   }
 
+  private async derivedImportSetQuestions(
+    user: TenantUser,
+    collegeId: string,
+    subjectId: string,
+    importSetId: string,
+  ) {
+    const prefix = `derived-imported-${subjectId}-`;
+    if (!importSetId.startsWith(prefix)) {
+      throw new NotFoundException("Question import set not found.");
+    }
+    const questions = await this.prisma.question.findMany({
+      where: this.legacyImportedQuestionWhere(user, collegeId, subjectId),
+      orderBy: { createdAt: "asc" },
+    });
+    return questions.filter((question) => {
+      const groupName = this.inferImportedQuestionGroupName(question.title);
+      return groupName
+        ? this.derivedImportSetId(subjectId, groupName) === importSetId
+        : false;
+    });
+  }
+
   private async importSetQuestions(
     user: TenantUser,
     collegeId: string,
@@ -1425,7 +1538,6 @@ export class QuestionBankService {
       where: {
         id: jobId,
         collegeId,
-        ...(subjectId ? { subjectId } : {}),
       },
       include: {
         questions: {
