@@ -43,7 +43,7 @@ export default function StudentAttemptPage({
   const router = useRouter();
   const [attempt, setAttempt] = useState<StudentAttempt | null>(null);
   const [current, setCurrent] = useState(0);
-  const [remaining, setRemaining] = useState(0);
+  const [remaining, setRemaining] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [online, setOnline] = useState(true);
   const [message, setMessage] = useState("");
@@ -67,6 +67,13 @@ export default function StudentAttemptPage({
     studentExamRequest<StudentAttempt>(`/api/v1/student/attempts/${attemptId}`)
       .then((data) => {
         setAttempt(data);
+        const initialRemaining = Math.max(
+          0,
+          Math.floor(
+            (new Date(data.expiresAt).getTime() - Date.now()) / 1000,
+          ),
+        );
+        setRemaining(Number.isFinite(initialRemaining) ? initialRemaining : 0);
         const savedIndex = Number(
           localStorage.getItem(`campustest-current-${attemptId}`) ?? 0,
         );
@@ -141,6 +148,7 @@ export default function StudentAttemptPage({
 
   useEffect(() => {
     if (
+      remaining === null ||
       remaining !== 0 ||
       autoSubmitting ||
       !attempt ||
@@ -168,7 +176,7 @@ export default function StudentAttemptPage({
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setRemaining((value) => Math.max(0, value - 1));
+      setRemaining((value) => (value === null ? null : Math.max(0, value - 1)));
     }, 1000);
     return () => {
       window.clearInterval(interval);
@@ -600,7 +608,7 @@ export default function StudentAttemptPage({
         <div className={online ? "status ok" : "status warn"}>
           {online ? "Connected" : "Reconnecting"}
         </div>
-        <strong>{formatSeconds(remaining)}</strong>
+        <strong>{remaining === null ? "--:--" : formatSeconds(remaining)}</strong>
         <span>
           {autoSubmitting
             ? "Submitting automatically"

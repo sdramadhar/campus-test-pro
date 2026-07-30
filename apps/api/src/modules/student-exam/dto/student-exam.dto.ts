@@ -151,6 +151,11 @@ export class SubmitAttemptDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class UpdateReviewDto {

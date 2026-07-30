@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -52,6 +53,8 @@ const activeAttemptStatuses = [
 
 @Injectable()
 export class StudentExamService {
+  private readonly logger = new Logger(StudentExamService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ExamOperationsService)
@@ -321,6 +324,16 @@ export class StudentExamService {
           actorRole: user.role,
         },
       });
+      this.logAttemptLifecycle("attempt_started", {
+        assessmentId,
+        attemptId: created.id,
+        durationMinutes: this.durationMinutes(assessment),
+        startTime: now.toISOString(),
+        endTime: expiresAt.toISOString(),
+        remainingTime: this.remainingSeconds(expiresAt, now),
+        questionCount: orderedQuestions.length,
+        submitReason: null,
+      });
       return created;
     });
 
@@ -347,24 +360,52 @@ export class StudentExamService {
       attempt.status === TestAttemptStatus.IN_PROGRESS &&
       attempt.expiresAt.getTime() <= Date.now()
     ) {
+      this.logAttemptLifecycle("attempt_auto_submit_requested", {
+        assessmentId: attempt.assessmentId,
+        attemptId: attempt.id,
+        durationMinutes: this.durationMinutes(attempt.assessment),
+        startTime: attempt.startedAt.toISOString(),
+        endTime: attempt.expiresAt.toISOString(),
+        remainingTime: this.remainingSeconds(attempt.expiresAt),
+        questionCount: attempt.questions.length,
+        submitReason: "api-time-check",
+      });
       await this.operations.autoSubmitAttempt(attempt.id, "api-time-check");
     } else {
       await this.expireIfNeeded(attempt.id);
     }
     const finalAttempt = await this.prisma.testAttempt.findUniqueOrThrow({
       where: { id: attempt.id },
+      include: {
+        assessment: {
+          select: { durationMinutes: true, durationMin: true },
+        },
+        _count: { select: { questions: true } },
+      },
     });
     const now = new Date();
+    const remainingSeconds = this.remainingSeconds(finalAttempt.expiresAt, now);
+    this.logAttemptLifecycle("attempt_time_checked", {
+      assessmentId: finalAttempt.assessmentId,
+      attemptId: finalAttempt.id,
+      durationMinutes: this.durationMinutes(finalAttempt.assessment),
+      startTime: finalAttempt.startedAt.toISOString(),
+      endTime: finalAttempt.expiresAt.toISOString(),
+      remainingTime: remainingSeconds,
+      questionCount: finalAttempt._count.questions,
+      submitReason:
+        finalAttempt.status === TestAttemptStatus.AUTO_SUBMITTED
+          ? "api-time-check"
+          : null,
+      attemptStatus: finalAttempt.status,
+    });
     return {
       success: true,
       data: {
         serverNow: now.toISOString(),
         startedAt: finalAttempt.startedAt,
         expiresAt: finalAttempt.expiresAt,
-        remainingSeconds: Math.max(
-          0,
-          Math.floor((finalAttempt.expiresAt.getTime() - now.getTime()) / 1000),
-        ),
+        remainingSeconds,
         attemptStatus: finalAttempt.status,
       },
     };
@@ -515,6 +556,17 @@ export class StudentExamService {
       const status = isExpired
         ? TestAttemptStatus.AUTO_SUBMITTED
         : TestAttemptStatus.SUBMITTED;
+      this.logAttemptLifecycle("attempt_submit_requested", {
+        assessmentId: attempt.assessmentId,
+        attemptId: attempt.id,
+        durationMinutes: this.durationMinutes(attempt.assessment),
+        startTime: attempt.startedAt.toISOString(),
+        endTime: attempt.expiresAt.toISOString(),
+        remainingTime: this.remainingSeconds(attempt.expiresAt, submittedAt),
+        questionCount: attempt.questions.length,
+        submitReason:
+          dto.reason ?? (isExpired ? "duration-expired" : "student-submit"),
+      });
       const answerCount = attempt.answers.filter((answer) =>
         this.studentAnswerAnswered(answer),
       ).length;
@@ -1031,6 +1083,16 @@ export class StudentExamService {
       throw new ForbiddenException("Attempt is no longer accepting answers.");
     }
     if (attempt.expiresAt.getTime() <= Date.now()) {
+      this.logAttemptLifecycle("attempt_write_rejected_expired", {
+        assessmentId: attempt.assessmentId,
+        attemptId,
+        durationMinutes: null,
+        startTime: attempt.startedAt.toISOString(),
+        endTime: attempt.expiresAt.toISOString(),
+        remainingTime: this.remainingSeconds(attempt.expiresAt),
+        questionCount: attempt.questions.length,
+        submitReason: "answer-write-expired",
+      });
       await tx.testAttempt.update({
         where: { id: attemptId },
         data: { status: TestAttemptStatus.EXPIRED },
@@ -1073,6 +1135,16 @@ export class StudentExamService {
       attempt.status === TestAttemptStatus.IN_PROGRESS &&
       attempt.expiresAt.getTime() <= Date.now()
     ) {
+      this.logAttemptLifecycle("attempt_marked_expired", {
+        assessmentId: attempt.assessmentId,
+        attemptId,
+        durationMinutes: null,
+        startTime: attempt.startedAt.toISOString(),
+        endTime: attempt.expiresAt.toISOString(),
+        remainingTime: this.remainingSeconds(attempt.expiresAt),
+        questionCount: null,
+        submitReason: "duration-expired",
+      });
       return this.prisma.testAttempt.update({
         where: { id: attemptId },
         data: { status: TestAttemptStatus.EXPIRED },
@@ -1883,6 +1955,20 @@ export class StudentExamService {
     durationMin?: number | null;
   }) {
     return assessment.durationMinutes ?? assessment.durationMin ?? 30;
+  }
+
+  private remainingSeconds(expiresAt: Date, from = new Date()) {
+    return Math.max(
+      0,
+      Math.floor((expiresAt.getTime() - from.getTime()) / 1000),
+    );
+  }
+
+  private logAttemptLifecycle(
+    event: string,
+    payload: Record<string, unknown>,
+  ) {
+    this.logger.log(JSON.stringify({ event, ...payload }));
   }
 
   private safeOptionSnapshot(

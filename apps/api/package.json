@@ -7,7 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\" \"prisma/**/*.ts\"",
-    "test": "tsx test/ai-openai-config.test.ts && tsx test/ai-generation-idempotency.test.ts && tsx test/assessment-publish-marks.test.ts && tsx test/auth.integration.ts",
+    "test": "tsx test/ai-openai-config.test.ts && tsx test/ai-generation-idempotency.test.ts && tsx test/assessment-publish-marks.test.ts && tsx test/attempt-lifecycle-diagnostics.test.ts && tsx test/auth.integration.ts",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
