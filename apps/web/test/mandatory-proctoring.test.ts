@@ -28,13 +28,16 @@ function main(): void {
   assert(instructions.includes("fullscreenReady,"));
   assert(attemptPage.includes('"CAMERA_DISABLED"'));
   assert(attemptPage.includes('"PAGE_RELOAD_ATTEMPT"'));
+  assert(attemptPage.includes('"BACK_NAVIGATION_ATTEMPT"'));
   assert(attemptPage.includes("remaining === null"));
   assert(testsPage.includes("Attempts Used"));
   assert(testsPage.includes("Retry Test"));
   assert(testsPage.includes("Start Attempt"));
   assert(proctoring.includes('| "CAMERA_DISABLED"'));
   assert(proctoring.includes('| "PAGE_RELOAD_ATTEMPT"'));
+  assert(proctoring.includes('| "BACK_NAVIGATION_ATTEMPT"'));
   assert(proctoring.includes("flagThreshold"));
+  assert(proctoring.includes("allowedExamExitViolations"));
 
   console.log("Mandatory proctoring web tests passed.");
 }

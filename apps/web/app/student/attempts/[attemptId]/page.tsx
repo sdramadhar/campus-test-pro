@@ -33,6 +33,13 @@ import {
 } from "../../../lib/strict-proctoring";
 
 type SaveState = "idle" | "saving" | "saved" | "failed";
+type WarningState = {
+  eventType: ProctoringEventType;
+  violationCount: number;
+  remainingChances: number;
+  finalWarning: boolean;
+  message: string;
+} | null;
 
 export default function StudentAttemptPage({
   params,
@@ -55,11 +62,15 @@ export default function StudentAttemptPage({
   const [cameraState, setCameraState] = useState("not-started");
   const [fullscreenState, setFullscreenState] = useState("pending");
   const [violationCount, setViolationCount] = useState(0);
+  const [remainingChances, setRemainingChances] = useState(2);
+  const [warningState, setWarningState] = useState<WarningState>(null);
   const timerRef = useRef<number | undefined>(undefined);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const alarmRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const proctorSequenceRef = useRef(1);
   const lastEventRef = useRef(new Map<string, number>());
+  const lastViolationBurstRef = useRef(0);
   const autoSubmitRef = useRef(false);
   const queueKey = `campustest-answer-queue-${attemptId}`;
 
@@ -99,6 +110,7 @@ export default function StudentAttemptPage({
           Boolean(attempt.assessment.fullscreenPreferred),
         );
         setProctoringPolicy(policy);
+        setRemainingChances(policy.allowedExamExitViolations);
         if (!strictModeRequired(policy)) {
           setProctoringReady(true);
           setCameraState("not-required");
@@ -110,6 +122,7 @@ export default function StudentAttemptPage({
           Boolean(attempt.assessment.fullscreenPreferred),
         );
         setProctoringPolicy(policy);
+        setRemainingChances(policy.allowedExamExitViolations);
         if (!strictModeRequired(policy)) {
           setProctoringReady(true);
         }
@@ -184,6 +197,13 @@ export default function StudentAttemptPage({
   }, []);
 
   useEffect(() => {
+    document.body.classList.add("exam-body-lock");
+    return () => {
+      document.body.classList.remove("exam-body-lock");
+    };
+  }, []);
+
+  useEffect(() => {
     const onOnline = () => {
       setOnline(true);
       void flushQueue();
@@ -205,18 +225,35 @@ export default function StudentAttemptPage({
     const onPageHide = () => {
       void recordProctoringEvent("PAGE_RELOAD_ATTEMPT");
     };
-    const onBeforeUnload = () => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
       void recordProctoringEvent("PAGE_RELOAD_ATTEMPT");
+      event.preventDefault();
+      try {
+        Object.defineProperty(event, "returnValue", {
+          configurable: true,
+          value: "",
+        });
+      } catch {
+        // preventDefault still triggers the browser's supported unload warning.
+      }
+      return "";
+    };
+    window.history.pushState(null, "", window.location.href);
+    const onPopState = () => {
+      window.history.pushState(null, "", window.location.href);
+      void recordProctoringEvent("BACK_NAVIGATION_ATTEMPT");
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("popstate", onPopState);
     return () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("popstate", onPopState);
     };
   }, [attemptId, proctoringPolicy]);
 
@@ -351,24 +388,67 @@ export default function StudentAttemptPage({
     }
     lastEventRef.current.set(eventType, now);
     const event = createProctoringEvent(eventType, nextProctorSequence());
-    await sendProctoringEventBatch(attemptId, [event]).catch(() => undefined);
+    const result = await sendProctoringEventBatch(attemptId, [event]).catch(
+      () => null,
+    );
+    if (result) {
+      setViolationCount(result.violationCount);
+      setRemainingChances(result.remainingChances);
+      if (result.autoSubmitted) {
+        autoSubmitRef.current = true;
+        setAutoSubmitting(true);
+        setMessage("Proctoring limits reached. Submitting automatically...");
+        router.replace(`/student/attempts/${attemptId}/submitted`);
+        return;
+      }
+    }
     if (eventSeverity(eventType) !== "info") {
-      setViolationCount((count) => {
-        const next = count + 1;
-        if (
-          proctoringPolicy?.autoSubmitOnCriticalViolation &&
-          next >= proctoringPolicy.violationLimit
-        ) {
-          void autoSubmitForProctoring(eventType);
-        }
-        return next;
-      });
+      const count = result?.violationCount ?? violationCount + 1;
+      const chances =
+        result?.remainingChances ??
+        Math.max((proctoringPolicy?.allowedExamExitViolations ?? 2) - count, 0);
+      setViolationWarning(eventType, count, chances);
       setProctoringMessage(
         eventSeverity(eventType) === "critical"
           ? "A critical proctoring issue was recorded."
           : "A proctoring warning was recorded. Return to the exam window.",
       );
     }
+  }
+
+  function setViolationWarning(
+    eventType: ProctoringEventType,
+    count: number,
+    chances: number,
+  ): void {
+    const now = Date.now();
+    if (now - lastViolationBurstRef.current < 1500) {
+      return;
+    }
+    lastViolationBurstRef.current = now;
+    const allowed = proctoringPolicy?.allowedExamExitViolations ?? 2;
+    setWarningState({
+      eventType,
+      violationCount: count,
+      remainingChances: chances,
+      finalWarning: count >= allowed,
+      message:
+        eventType === "FULLSCREEN_EXIT"
+          ? "Fullscreen exited. Return to fullscreen to continue the exam."
+          : "Exam focus was interrupted. Return to fullscreen to continue the exam.",
+    });
+    void playAlarm();
+  }
+
+  async function playAlarm(): Promise<void> {
+    const audio = alarmRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    await audio.play().catch(() => undefined);
+    window.setTimeout(() => {
+      audio.pause();
+      audio.currentTime = 0;
+    }, 3500);
   }
 
   async function beginProctoredAttempt(): Promise<void> {
@@ -468,27 +548,13 @@ export default function StudentAttemptPage({
     ).catch(() => undefined);
   }
 
-  async function autoSubmitForProctoring(
-    reason: ProctoringEventType,
-  ): Promise<void> {
-    if (autoSubmitRef.current || autoSubmitting) {
-      return;
+  async function returnToFullscreen(): Promise<void> {
+    await document.documentElement.requestFullscreen().catch(() => undefined);
+    setFullscreenState(document.fullscreenElement ? "active" : "pending");
+    if (document.fullscreenElement) {
+      setWarningState(null);
+      setProctoringMessage("Fullscreen restored. Continue the exam.");
     }
-    autoSubmitRef.current = true;
-    setAutoSubmitting(true);
-    setMessage("Proctoring limits reached. Submitting automatically...");
-    await flushQueue().catch(() => undefined);
-    await sendProctoringEventBatch(attemptId, [
-      createProctoringEvent("AUTO_SUBMIT_TRIGGERED", nextProctorSequence()),
-    ]).catch(() => undefined);
-    await studentExamRequest(`/api/v1/student/attempts/${attemptId}/submit`, {
-      method: "POST",
-      body: JSON.stringify({
-        idempotencyKey: `proctoring-auto-${attemptId}`,
-        reason,
-      }),
-    });
-    router.replace(`/student/attempts/${attemptId}/submitted`);
   }
 
   function setQuestion(index: number): void {
@@ -535,6 +601,9 @@ export default function StudentAttemptPage({
     value: unknown,
     markedForReview = nextQuestion.answer?.markedForReview ?? false,
   ): void {
+    if (warningState) {
+      return;
+    }
     const body = answerBody(nextQuestion, value, markedForReview);
     window.clearTimeout(timerRef.current);
     setSaveState("saving");
@@ -570,7 +639,7 @@ export default function StudentAttemptPage({
   }
 
   async function clearAnswer(): Promise<void> {
-    if (!question) {
+    if (!question || warningState) {
       return;
     }
     await studentExamRequest<SavedAnswer>(
@@ -612,9 +681,15 @@ export default function StudentAttemptPage({
     <AuthShell
       allowedRoles={["STUDENT"]}
       eyebrow="Live attempt"
+      examMode
       title={attempt?.assessment.title ?? "Exam Attempt"}
     >
-      <section className="exam-banner">
+      <audio preload="auto" ref={alarmRef} src="/audio/exam-alert.wav" />
+      <section className="exam-banner exam-only-banner">
+        <div>
+          <p className="eyebrow">Live attempt</p>
+          <h1>{attempt?.assessment.title ?? "Exam Attempt"}</h1>
+        </div>
         <div className={online ? "status ok" : "status warn"}>
           {online ? "Connected" : "Reconnecting"}
         </div>
@@ -650,6 +725,7 @@ export default function StudentAttemptPage({
             <div className="proctoring-status-grid">
               <span>Camera: {cameraState}</span>
               <span>Violations: {violationCount}</span>
+              <span>Remaining chances: {remainingChances}</span>
               <span>Fullscreen: {fullscreenState}</span>
             </div>
             {proctoringMessage && (
@@ -676,7 +752,10 @@ export default function StudentAttemptPage({
         (!proctoringPolicy ||
           !strictModeRequired(proctoringPolicy) ||
           proctoringReady) && (
-          <section className="exam-layout">
+          <section
+            aria-hidden={warningState ? "true" : undefined}
+            className={warningState ? "exam-layout exam-paused" : "exam-layout"}
+          >
             <aside className="question-palette">
               {attempt.questions.map((item, index) => {
                 const saved = answersByQuestion.get(item.id);
@@ -687,6 +766,7 @@ export default function StudentAttemptPage({
                     onClick={() => {
                       setQuestion(index);
                     }}
+                    disabled={Boolean(warningState)}
                     type="button"
                   >
                     {index + 1}
@@ -717,7 +797,7 @@ export default function StudentAttemptPage({
               )}
               <div className="form-actions">
                 <button
-                  disabled={current === 0}
+                  disabled={current === 0 || Boolean(warningState)}
                   onClick={() => {
                     setQuestion(current - 1);
                   }}
@@ -726,6 +806,7 @@ export default function StudentAttemptPage({
                   Previous
                 </button>
                 <button
+                  disabled={Boolean(warningState)}
                   onClick={() => {
                     scheduleSave(question, "", true);
                   }}
@@ -735,6 +816,7 @@ export default function StudentAttemptPage({
                   Mark for Review
                 </button>
                 <button
+                  disabled={Boolean(warningState)}
                   onClick={() => {
                     void clearAnswer();
                   }}
@@ -743,6 +825,7 @@ export default function StudentAttemptPage({
                   Clear Answer
                 </button>
                 <button
+                  disabled={Boolean(warningState)}
                   onClick={() => {
                     setQuestion(
                       Math.min(current + 1, attempt.questions.length - 1),
@@ -755,6 +838,7 @@ export default function StudentAttemptPage({
                 </button>
                 <button
                   className="primary-action"
+                  disabled={Boolean(warningState)}
                   onClick={() => {
                     void submit();
                   }}
@@ -773,6 +857,37 @@ export default function StudentAttemptPage({
             </article>
           </section>
         )}
+      {warningState && (
+        <div className="exam-warning-overlay" role="alertdialog" aria-modal="true">
+          <div className="exam-warning-panel">
+            <AlertTriangle aria-hidden="true" size={54} />
+            <p className="eyebrow">
+              {warningState.finalWarning
+                ? `Final Warning ${String(warningState.violationCount)} of 2`
+                : `Warning ${String(warningState.violationCount)} of 2`}
+            </p>
+            <h2>{warningState.message}</h2>
+            <p>
+              Violation count: {String(warningState.violationCount)}. Remaining
+              chances: {String(warningState.remainingChances)}.
+            </p>
+            {warningState.finalWarning && (
+              <p className="strong-warning">
+                The next violation will automatically submit this assessment.
+              </p>
+            )}
+            <button
+              className="primary-action warning-action"
+              onClick={() => {
+                void returnToFullscreen();
+              }}
+              type="button"
+            >
+              Return to Fullscreen
+            </button>
+          </div>
+        </div>
+      )}
     </AuthShell>
   );
 }

@@ -375,6 +375,14 @@ export class CreateAssessmentDto {
   @Max(10)
   maxAttempts?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  allowedExamExitViolations?: number;
+
   @ApiPropertyOptional({ enum: AttemptScoringPolicy })
   @IsOptional()
   @IsEnum(AttemptScoringPolicy)

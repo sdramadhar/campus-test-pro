@@ -164,6 +164,7 @@ enum ProctoringEventType {
   TAB_VISIBLE
   WINDOW_BLUR
   WINDOW_FOCUS
+  BACK_NAVIGATION_ATTEMPT
   COPY
   PASTE
   CONTEXT_MENU
@@ -1047,6 +1048,7 @@ model Assessment {
   allowBackNavigation    Boolean                       @default(true)
   negativeMarkingEnabled Boolean                       @default(false)
   fullscreenPreferred    Boolean                       @default(false)
+  allowedExamExitViolations Int                        @default(2)
   createdById            String?
   createdBy              User?                         @relation("AssessmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedById            String?

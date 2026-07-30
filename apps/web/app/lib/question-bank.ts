@@ -150,6 +150,7 @@ export const assessmentSchema = z.object({
   durationMinutes: z.coerce.number().int().min(1),
   passingMarks: z.union([z.coerce.number().min(0), z.literal("")]).optional(),
   maxAttempts: z.coerce.number().int().min(1).max(10),
+  allowedExamExitViolations: z.coerce.number().int().min(0).max(10).default(2),
   attemptScoringPolicy: z
     .enum(["BEST", "LATEST", "FIRST"])
     .default("BEST"),

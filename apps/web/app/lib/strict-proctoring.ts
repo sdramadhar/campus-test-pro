@@ -7,6 +7,7 @@ export type ProctoringEventType =
   | "TAB_VISIBLE"
   | "WINDOW_BLUR"
   | "WINDOW_FOCUS"
+  | "BACK_NAVIGATION_ATTEMPT"
   | "COPY"
   | "PASTE"
   | "CONTEXT_MENU"
@@ -29,6 +30,7 @@ export interface StudentProctoringPolicy {
   warningThreshold?: number;
   flagThreshold?: number;
   autoSubmitOnCriticalViolation?: boolean;
+  allowedExamExitViolations?: number;
 }
 
 export interface ProctoringRuntimePolicy {
@@ -36,6 +38,7 @@ export interface ProctoringRuntimePolicy {
   fullscreenRequired: boolean;
   cameraRequired: boolean;
   autoSubmitOnCriticalViolation: boolean;
+  allowedExamExitViolations: number;
   violationLimit: number;
   gracePeriodMs: number;
   evidenceIntervalMs: number;
@@ -49,6 +52,7 @@ export interface ProctoringEventPayload {
 }
 
 export const strictProctoringDefaults = {
+  allowedExamExitViolations: 2,
   violationLimit: 3,
   gracePeriodMs: 10000,
   evidenceIntervalMs: 60000,
@@ -59,6 +63,9 @@ export function resolveRuntimePolicy(
   fullscreenPreferred: boolean,
 ): ProctoringRuntimePolicy {
   const proctoringEnabled = Boolean(policy?.proctoringEnabled);
+  const allowedExamExitViolations =
+    policy?.allowedExamExitViolations ??
+    strictProctoringDefaults.allowedExamExitViolations;
   return {
     proctoringEnabled,
     fullscreenRequired:
@@ -66,10 +73,8 @@ export function resolveRuntimePolicy(
     cameraRequired: policy?.cameraRequired === true && proctoringEnabled,
     autoSubmitOnCriticalViolation:
       policy?.autoSubmitOnCriticalViolation ?? proctoringEnabled,
-    violationLimit:
-      policy?.flagThreshold ??
-      policy?.warningThreshold ??
-      strictProctoringDefaults.violationLimit,
+    allowedExamExitViolations,
+    violationLimit: allowedExamExitViolations + 1,
     gracePeriodMs: strictProctoringDefaults.gracePeriodMs,
     evidenceIntervalMs: strictProctoringDefaults.evidenceIntervalMs,
   };
@@ -128,7 +133,9 @@ export function eventSeverity(
   if (
     eventType === "FULLSCREEN_EXIT" ||
     eventType === "TAB_HIDDEN" ||
-    eventType === "WINDOW_BLUR"
+    eventType === "WINDOW_BLUR" ||
+    eventType === "BACK_NAVIGATION_ATTEMPT" ||
+    eventType === "PAGE_RELOAD_ATTEMPT"
   )
     return "warning";
   if (
@@ -141,12 +148,23 @@ export function eventSeverity(
   return "info";
 }
 
+export interface ProctoringEventBatchResult {
+  accepted: number;
+  duplicateSafe: boolean;
+  violationCount: number;
+  allowedViolationLimit: number;
+  remainingChances: number;
+  autoSubmitted: boolean;
+  submitReason?: string;
+  session?: { status?: string; warningCount?: number; flagCount?: number };
+}
+
 export async function sendProctoringEventBatch(
   attemptId: string,
   events: ProctoringEventPayload[],
-): Promise<void> {
-  if (!events.length) return;
-  await studentExamRequest(
+): Promise<ProctoringEventBatchResult | null> {
+  if (!events.length) return null;
+  return studentExamRequest<ProctoringEventBatchResult>(
     `/api/v1/student/attempts/${attemptId}/proctoring/events/batch`,
     {
       method: "POST",

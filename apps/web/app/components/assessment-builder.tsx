@@ -36,6 +36,7 @@ const emptyAssessment: AssessmentFormValues = {
   durationMinutes: 60,
   passingMarks: "",
   maxAttempts: 3,
+  allowedExamExitViolations: 2,
   attemptScoringPolicy: "BEST",
   shuffleQuestions: false,
   shuffleOptions: false,
@@ -339,6 +340,9 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
               ? ""
               : Number(response.data.passingMarks ?? ""),
           maxAttempts: Number(response.data.maxAttempts ?? 3),
+          allowedExamExitViolations: Number(
+            response.data.allowedExamExitViolations ?? 2,
+          ),
           attemptScoringPolicy:
             readValue(response.data, "attemptScoringPolicy") === "-"
               ? "BEST"
@@ -611,6 +615,15 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
                 min={1}
                 type="number"
                 {...form.register("maxAttempts")}
+              />
+            </label>
+            <label className="form-field">
+              Allowed Fullscreen Exits
+              <input
+                max={10}
+                min={0}
+                type="number"
+                {...form.register("allowedExamExitViolations")}
               />
             </label>
             <label className="form-field">

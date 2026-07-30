@@ -480,6 +480,7 @@ interface AuthShellProps {
   eyebrow: string;
   children?: ReactNode;
   render?: (user: AuthUser) => ReactNode;
+  examMode?: boolean;
 }
 
 export function AuthShell({
@@ -488,6 +489,7 @@ export function AuthShell({
   eyebrow,
   children,
   render,
+  examMode = false,
 }: AuthShellProps) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -566,6 +568,14 @@ export function AuthShell({
       <div className="route-state error">
         We could not restore your session. Please return to login.
       </div>
+    );
+  }
+
+  if (examMode) {
+    return (
+      <main className="exam-shell" data-exam-shell="true">
+        {render ? render(user) : children}
+      </main>
     );
   }
 

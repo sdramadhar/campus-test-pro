@@ -18,6 +18,8 @@ function main(): void {
   assert.equal(policy.cameraRequired, true);
   assert.equal(policy.fullscreenRequired, true);
   assert.equal(policy.autoSubmitOnCriticalViolation, true);
+  assert.equal(policy.allowedExamExitViolations, 2);
+  assert.equal(policy.violationLimit, 3);
 
   const inactive = resolveRuntimePolicy(null, false);
   assert.equal(strictModeRequired(inactive), false);
@@ -50,6 +52,7 @@ function main(): void {
   assert(payload.idempotencyKey.includes("fullscreen_exit"));
   assert.equal(eventSeverity("WEBCAM_PERMISSION_DENIED"), "critical");
   assert.equal(eventSeverity("COPY"), "warning");
+  assert.equal(eventSeverity("BACK_NAVIGATION_ATTEMPT"), "warning");
 
   const attemptSource = readFileSync(
     resolve("app/student/attempts/[attemptId]/page.tsx"),
@@ -61,11 +64,22 @@ function main(): void {
   );
   assert(attemptSource.includes("navigator.mediaDevices.getUserMedia"));
   assert(attemptSource.includes("requestFullscreen"));
+  assert(attemptSource.includes("examMode"));
+  assert(!attemptSource.includes("<aside className=\"sidebar\""));
+  assert(attemptSource.includes("exam-warning-overlay"));
+  assert(attemptSource.includes("Fullscreen exited. Return to fullscreen to continue the exam."));
+  assert(attemptSource.includes("Final Warning"));
+  assert(attemptSource.includes("Return to Fullscreen"));
+  assert(attemptSource.includes("/audio/exam-alert.wav"));
+  assert(attemptSource.includes('"BACK_NAVIGATION_ATTEMPT"'));
+  assert(attemptSource.includes("Object.defineProperty(event, \"returnValue\""));
+  assert(attemptSource.includes("lastViolationBurstRef"));
   assert(helperSource.includes("proctoring/events/batch"));
   assert(helperSource.includes("proctoring/heartbeat"));
   assert(helperSource.includes("proctoring/evidence"));
+  assert(helperSource.includes("allowedExamExitViolations"));
   assert(attemptSource.includes("Start Camera Check"));
-  assert(attemptSource.includes("AUTO_SUBMIT_TRIGGERED"));
+  assert(helperSource.includes("AUTO_SUBMIT_TRIGGERED"));
 
   console.log("Strict proctoring web tests passed.");
 }
