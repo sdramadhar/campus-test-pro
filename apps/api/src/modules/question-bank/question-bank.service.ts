@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -34,6 +35,11 @@ type ModelDelegate = {
   count(args: unknown): Promise<number>;
   findMany(args: unknown): Promise<unknown[]>;
 };
+interface AssessmentMarksSnapshot {
+  totalMarks: number;
+  sectionMarks: number;
+  attachedQuestionsCount: number;
+}
 
 const questionInclude = {
   subject: true,
@@ -63,6 +69,8 @@ const assessmentInclude = {
 
 @Injectable()
 export class QuestionBankService {
+  private readonly logger = new Logger(QuestionBankService.name);
+
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async questionStats(user: TenantUser, query: BankListQueryDto) {
@@ -683,6 +691,7 @@ export class QuestionBankService {
           dto.marks === undefined ? undefined : { sectionMarks: dto.marks },
       },
     });
+    await this.recalculateAssessmentMarks(assessment.id);
     return { success: true, data: section };
   }
 
@@ -704,6 +713,7 @@ export class QuestionBankService {
           dto.marks === undefined ? undefined : { sectionMarks: dto.marks },
       },
     });
+    await this.recalculateAssessmentMarks(assessmentId);
     return { success: true, data: section };
   }
 
@@ -717,12 +727,11 @@ export class QuestionBankService {
       where: { sectionId },
       data: { sectionId: null },
     });
-    return {
-      success: true,
-      data: await this.prisma.assessmentSection.delete({
-        where: { id: sectionId },
-      }),
-    };
+    const deleted = await this.prisma.assessmentSection.delete({
+      where: { id: sectionId },
+    });
+    await this.recalculateAssessmentMarks(assessmentId);
+    return { success: true, data: deleted };
   }
 
   async addAssessmentQuestion(
@@ -898,7 +907,11 @@ export class QuestionBankService {
 
   async publishAssessment(user: TenantUser, id: string) {
     const assessment = await this.findAssessment(user, id);
-    const blockers = await this.publishBlockers(assessment.id);
+    const marks = await this.recalculateAssessmentMarks(assessment.id);
+    this.logger.log(
+      `Assessment publish marks check: assessmentId=${assessment.id} totalMarks=${String(marks.totalMarks)} passingMarks=${String(assessment.passingMarks ?? "null")} sectionMarks=${String(marks.sectionMarks)} attachedQuestions=${String(marks.attachedQuestionsCount)}`,
+    );
+    const blockers = await this.publishBlockers(assessment.id, marks);
     if (blockers.length > 0)
       throw new BadRequestException({
         message: "Assessment cannot be published.",
@@ -1200,21 +1213,54 @@ export class QuestionBankService {
     if (!item) throw new NotFoundException("Student not found.");
   }
 
-  private async recalculateAssessmentMarks(assessmentId: string) {
-    const questions = await this.prisma.assessmentQuestion.findMany({
-      where: { assessmentId },
+  private async recalculateAssessmentMarks(
+    assessmentId: string,
+  ): Promise<AssessmentMarksSnapshot> {
+    const assessment = await this.prisma.assessment.findUniqueOrThrow({
+      where: { id: assessmentId },
+      include: {
+        sections: true,
+        assessmentQuestions: true,
+      },
     });
-    const totalMarks = questions.reduce(
-      (sum, question) => sum + question.assignedMarks,
-      0,
-    );
+    const questionsBySection = new Map<string, number>();
+    let unsectionedQuestionMarks = 0;
+    for (const question of assessment.assessmentQuestions) {
+      if (question.sectionId) {
+        questionsBySection.set(
+          question.sectionId,
+          (questionsBySection.get(question.sectionId) ?? 0) +
+            question.assignedMarks,
+        );
+      } else {
+        unsectionedQuestionMarks += question.assignedMarks;
+      }
+    }
+    let sectionMarks = 0;
+    let totalMarks = unsectionedQuestionMarks;
+    for (const section of assessment.sections) {
+      const configuredMarks = this.sectionMarks(section.marksRule);
+      sectionMarks += configuredMarks;
+      totalMarks +=
+        configuredMarks > 0
+          ? configuredMarks
+          : (questionsBySection.get(section.id) ?? 0);
+    }
     await this.prisma.assessment.update({
       where: { id: assessmentId },
       data: { totalMarks },
     });
+    return {
+      totalMarks,
+      sectionMarks,
+      attachedQuestionsCount: assessment.assessmentQuestions.length,
+    };
   }
 
-  private async publishBlockers(assessmentId: string): Promise<string[]> {
+  private async publishBlockers(
+    assessmentId: string,
+    marks?: AssessmentMarksSnapshot,
+  ): Promise<string[]> {
     const assessment = await this.prisma.assessment.findUniqueOrThrow({
       where: { id: assessmentId },
       include: {
@@ -1227,6 +1273,8 @@ export class QuestionBankService {
         assignments: true,
       },
     });
+    const currentMarks =
+      marks ?? (await this.recalculateAssessmentMarks(assessmentId));
     const blockers: string[] = [];
     if (assessment.assessmentQuestions.length === 0)
       blockers.push("Add at least one question.");
@@ -1237,11 +1285,11 @@ export class QuestionBankService {
       0
     )
       blockers.push("Add at least one assignment.");
-    if (assessment.totalMarks <= 0)
+    if (currentMarks.totalMarks <= 0)
       blockers.push("Total marks must be greater than zero.");
     if (
       assessment.passingMarks !== null &&
-      assessment.passingMarks > assessment.totalMarks
+      assessment.passingMarks > currentMarks.totalMarks
     )
       blockers.push("Passing marks cannot exceed total marks.");
     if (
@@ -1264,6 +1312,23 @@ export class QuestionBankService {
       }
     }
     return blockers;
+  }
+
+  private sectionMarks(marksRule: Prisma.JsonValue | null): number {
+    if (
+      marksRule &&
+      typeof marksRule === "object" &&
+      !Array.isArray(marksRule) &&
+      "sectionMarks" in marksRule
+    ) {
+      const value = marksRule.sectionMarks;
+      const marks =
+        typeof value === "string" || typeof value === "number"
+          ? Number(value)
+          : 0;
+      return Number.isFinite(marks) && marks > 0 ? marks : 0;
+    }
+    return 0;
   }
 
   private questionScopeWhere(

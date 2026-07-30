@@ -384,6 +384,10 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
 
   async function addQuestion(questionId: string, sectionId?: string): Promise<void> {
     if (!assessment?.id) return;
+    const selectedQuestion = questions.find((question) => question.id === questionId);
+    const assignedMarks = Number(
+      selectedQuestion?.defaultMarks ?? selectedQuestion?.marks ?? 1,
+    );
     await academicRequest(`/api/v1/assessments/${assessment.id}/questions`, {
       method: "POST",
       body: JSON.stringify({
@@ -392,7 +396,7 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
         displayOrder:
           ((assessment.assessmentQuestions as unknown[] | undefined)?.length ??
             0) + 1,
-        assignedMarks: 1,
+        assignedMarks: Number.isFinite(assignedMarks) ? assignedMarks : 1,
         assignedNegativeMarks: 0,
         mandatory: true,
       }),
