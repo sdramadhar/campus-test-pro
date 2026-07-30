@@ -15,6 +15,7 @@ import {
 } from "class-validator";
 import {
   AssessmentStatus,
+  AttemptScoringPolicy,
   QuestionDifficulty,
   QuestionStatus,
   QuestionType,
@@ -366,7 +367,13 @@ export class CreateAssessmentDto {
   @Transform(({ value }) => Number(value))
   @IsInt()
   @Min(1)
+  @Max(10)
   maxAttempts?: number;
+
+  @ApiPropertyOptional({ enum: AttemptScoringPolicy })
+  @IsOptional()
+  @IsEnum(AttemptScoringPolicy)
+  attemptScoringPolicy?: AttemptScoringPolicy;
 
   @ApiPropertyOptional({ enum: ResultVisibility })
   @IsOptional()

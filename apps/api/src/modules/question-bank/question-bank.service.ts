@@ -607,7 +607,8 @@ export class QuestionBankService {
         durationMinutes: dto.durationMinutes,
         durationMin: dto.durationMinutes,
         passingMarks: dto.passingMarks,
-        maxAttempts: dto.maxAttempts ?? 1,
+        maxAttempts: dto.maxAttempts ?? 3,
+        attemptScoringPolicy: dto.attemptScoringPolicy ?? "BEST",
         resultVisibility: dto.resultVisibility,
         shuffleQuestions: dto.shuffleQuestions ?? false,
         shuffleOptions: dto.shuffleOptions ?? false,
@@ -649,6 +650,8 @@ export class QuestionBankService {
         durationMin: dto.durationMinutes,
         passingMarks: dto.passingMarks ?? assessment.passingMarks,
         maxAttempts: dto.maxAttempts ?? assessment.maxAttempts,
+        attemptScoringPolicy:
+          dto.attemptScoringPolicy ?? assessment.attemptScoringPolicy,
         resultVisibility: dto.resultVisibility ?? assessment.resultVisibility,
         shuffleQuestions: dto.shuffleQuestions ?? assessment.shuffleQuestions,
         shuffleOptions: dto.shuffleOptions ?? assessment.shuffleOptions,

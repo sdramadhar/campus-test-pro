@@ -921,9 +921,18 @@ export class ProctoringService {
     return this.prisma.proctoringPolicy.create({
       data: {
         collegeId: collegeId ?? null,
-        name: "Monitoring Disabled",
+        name: "Strict Exam Monitoring",
         isDefault: true,
-        proctoringEnabled: false,
+        proctoringEnabled: true,
+        consentRequired: true,
+        fullscreenRequired: true,
+        fullscreenExitPolicy: FullscreenExitPolicy.WARN,
+        tabSwitchMonitoring: true,
+        webcamRequired: true,
+        webcamSnapshotMode: WebcamSnapshotMode.PERIODIC,
+        warningThreshold: 2,
+        flagThreshold: 3,
+        autoSubmitOnCriticalViolation: true,
         createdById: null,
       },
     });
@@ -1209,6 +1218,9 @@ export class ProctoringService {
       case ProctoringEventType.TAB_HIDDEN:
       case ProctoringEventType.WINDOW_BLUR:
         return snapshot.tabSwitchMonitoring ? 6 : 0;
+      case ProctoringEventType.CAMERA_DISABLED:
+      case ProctoringEventType.PAGE_RELOAD_ATTEMPT:
+        return 8;
       case ProctoringEventType.COPY:
       case ProctoringEventType.PASTE:
       case ProctoringEventType.CONTEXT_MENU:
@@ -1324,20 +1336,20 @@ export class ProctoringService {
       collegeId: user.role === Role.SUPER_ADMIN ? null : user.collegeId,
       assessmentId: dto.assessmentId,
       name: dto.name.trim(),
-      proctoringEnabled: dto.proctoringEnabled ?? false,
-      consentRequired: dto.consentRequired ?? false,
-      fullscreenRequired: dto.fullscreenRequired ?? false,
+      proctoringEnabled: dto.proctoringEnabled ?? true,
+      consentRequired: dto.consentRequired ?? true,
+      fullscreenRequired: dto.fullscreenRequired ?? true,
       fullscreenExitPolicy:
-        dto.fullscreenExitPolicy ?? FullscreenExitPolicy.LOG_ONLY,
-      tabSwitchMonitoring: dto.tabSwitchMonitoring ?? false,
+        dto.fullscreenExitPolicy ?? FullscreenExitPolicy.WARN,
+      tabSwitchMonitoring: dto.tabSwitchMonitoring ?? true,
       copyMonitoring: dto.copyMonitoring ?? false,
       pasteMonitoring: dto.pasteMonitoring ?? false,
       contextMenuMonitoring: dto.contextMenuMonitoring ?? false,
       keyboardShortcutMonitoring: dto.keyboardShortcutMonitoring ?? false,
       multipleSessionPolicy:
         dto.multipleSessionPolicy ?? MultipleSessionPolicy.WARN_ONLY,
-      webcamRequired: dto.webcamRequired ?? false,
-      webcamSnapshotMode: dto.webcamSnapshotMode ?? WebcamSnapshotMode.DISABLED,
+      webcamRequired: dto.webcamRequired ?? true,
+      webcamSnapshotMode: dto.webcamSnapshotMode ?? WebcamSnapshotMode.PERIODIC,
       webcamSnapshotIntervalSeconds: dto.webcamSnapshotIntervalSeconds,
       microphoneRequired: dto.microphoneRequired ?? false,
       microphoneCheckOnly: dto.microphoneCheckOnly ?? true,
@@ -1348,9 +1360,9 @@ export class ProctoringService {
       environmentCheckRequired: dto.environmentCheckRequired ?? false,
       networkDisconnectThresholdSeconds:
         dto.networkDisconnectThresholdSeconds ?? 60,
-      warningThreshold: dto.warningThreshold ?? 3,
-      flagThreshold: dto.flagThreshold ?? 5,
-      autoSubmitOnCriticalViolation: dto.autoSubmitOnCriticalViolation ?? false,
+      warningThreshold: dto.warningThreshold ?? 2,
+      flagThreshold: dto.flagThreshold ?? 3,
+      autoSubmitOnCriticalViolation: dto.autoSubmitOnCriticalViolation ?? true,
       allowManualOverride: dto.allowManualOverride ?? true,
       evidenceRetentionDays: dto.evidenceRetentionDays ?? 30,
       studentReviewVisibility: dto.studentReviewVisibility ?? true,
@@ -1361,6 +1373,8 @@ export class ProctoringService {
         SECOND_SESSION_ATTEMPT: 25,
         FULLSCREEN_EXIT: 8,
         TAB_HIDDEN: 6,
+        CAMERA_DISABLED: 8,
+        PAGE_RELOAD_ATTEMPT: 8,
         NETWORK_DISCONNECT: 12,
         MANUAL_FLAG: 25,
       },
@@ -1375,20 +1389,20 @@ export class ProctoringService {
     return {
       assessmentId: dto.assessmentId,
       name: dto.name.trim(),
-      proctoringEnabled: dto.proctoringEnabled ?? false,
-      consentRequired: dto.consentRequired ?? false,
-      fullscreenRequired: dto.fullscreenRequired ?? false,
+      proctoringEnabled: dto.proctoringEnabled ?? true,
+      consentRequired: dto.consentRequired ?? true,
+      fullscreenRequired: dto.fullscreenRequired ?? true,
       fullscreenExitPolicy:
-        dto.fullscreenExitPolicy ?? FullscreenExitPolicy.LOG_ONLY,
-      tabSwitchMonitoring: dto.tabSwitchMonitoring ?? false,
+        dto.fullscreenExitPolicy ?? FullscreenExitPolicy.WARN,
+      tabSwitchMonitoring: dto.tabSwitchMonitoring ?? true,
       copyMonitoring: dto.copyMonitoring ?? false,
       pasteMonitoring: dto.pasteMonitoring ?? false,
       contextMenuMonitoring: dto.contextMenuMonitoring ?? false,
       keyboardShortcutMonitoring: dto.keyboardShortcutMonitoring ?? false,
       multipleSessionPolicy:
         dto.multipleSessionPolicy ?? MultipleSessionPolicy.WARN_ONLY,
-      webcamRequired: dto.webcamRequired ?? false,
-      webcamSnapshotMode: dto.webcamSnapshotMode ?? WebcamSnapshotMode.DISABLED,
+      webcamRequired: dto.webcamRequired ?? true,
+      webcamSnapshotMode: dto.webcamSnapshotMode ?? WebcamSnapshotMode.PERIODIC,
       webcamSnapshotIntervalSeconds: dto.webcamSnapshotIntervalSeconds,
       microphoneRequired: dto.microphoneRequired ?? false,
       microphoneCheckOnly: dto.microphoneCheckOnly ?? true,
@@ -1399,9 +1413,9 @@ export class ProctoringService {
       environmentCheckRequired: dto.environmentCheckRequired ?? false,
       networkDisconnectThresholdSeconds:
         dto.networkDisconnectThresholdSeconds ?? 60,
-      warningThreshold: dto.warningThreshold ?? 3,
-      flagThreshold: dto.flagThreshold ?? 5,
-      autoSubmitOnCriticalViolation: dto.autoSubmitOnCriticalViolation ?? false,
+      warningThreshold: dto.warningThreshold ?? 2,
+      flagThreshold: dto.flagThreshold ?? 3,
+      autoSubmitOnCriticalViolation: dto.autoSubmitOnCriticalViolation ?? true,
       allowManualOverride: dto.allowManualOverride ?? true,
       evidenceRetentionDays: dto.evidenceRetentionDays ?? 30,
       studentReviewVisibility: dto.studentReviewVisibility ?? true,
@@ -1412,6 +1426,8 @@ export class ProctoringService {
         SECOND_SESSION_ATTEMPT: 25,
         FULLSCREEN_EXIT: 8,
         TAB_HIDDEN: 6,
+        CAMERA_DISABLED: 8,
+        PAGE_RELOAD_ATTEMPT: 8,
         NETWORK_DISCONNECT: 12,
         MANUAL_FLAG: 25,
       },
@@ -1462,6 +1478,9 @@ export class ProctoringService {
       microphoneRequired: policy.microphoneRequired,
       screenShareRequired: policy.screenShareRequired,
       retentionDays: policy.evidenceRetentionDays,
+      warningThreshold: policy.warningThreshold,
+      flagThreshold: policy.flagThreshold,
+      autoSubmitOnCriticalViolation: policy.autoSubmitOnCriticalViolation,
       reviewerAccess: "Authorized institution reviewers only.",
       privacyNotice: policy.institutionPrivacyNotice,
       supportContact: policy.emergencySupportContact,

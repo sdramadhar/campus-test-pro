@@ -49,6 +49,8 @@ enum AuditEvent {
   ASSESSMENT_SCHEDULE
   ASSESSMENT_CANCEL
   ATTEMPT_START
+  ATTEMPT_RESET
+  ATTEMPT_GRANT
   ANSWER_SAVE
   ATTEMPT_SUBMIT
   ATTEMPT_AUTO_SUBMIT
@@ -168,6 +170,8 @@ enum ProctoringEventType {
   FORBIDDEN_SHORTCUT
   NETWORK_DISCONNECT
   NETWORK_RECONNECT
+  CAMERA_DISABLED
+  PAGE_RELOAD_ATTEMPT
   SECOND_SESSION_ATTEMPT
   WEBCAM_PERMISSION_GRANTED
   WEBCAM_PERMISSION_DENIED
@@ -400,6 +404,12 @@ enum ResultVisibility {
   SCHEDULED
 }
 
+enum AttemptScoringPolicy {
+  BEST
+  LATEST
+  FIRST
+}
+
 enum QuestionType {
   SINGLE_CHOICE
   MULTIPLE_CHOICE
@@ -608,6 +618,8 @@ model User {
   enrollments              Enrollment[]
   submissions              Submission[]
   testAttempts             TestAttempt[]
+  attemptGrants            AssessmentAttemptGrant[]     @relation("AttemptGrantStudent")
+  attemptGrantsCreated     AssessmentAttemptGrant[]     @relation("AttemptGrantCreatedBy")
   manualReviewsAssigned    ManualReviewTask[]          @relation("ManualReviewAssignedTo")
   notifications            Notification[]
   resultModerations        ResultModeration[]          @relation("ResultModeratedBy")
@@ -670,6 +682,7 @@ model College {
   assessmentsManaged   Assessment[]
   auditLogs            AuditLog[]
   testAttempts         TestAttempt[]
+  attemptGrants        AssessmentAttemptGrant[]
   results              Result[]
   notifications        Notification[]
   settings             CollegeSettings?
@@ -1021,7 +1034,8 @@ model Assessment {
   durationMinutes        Int?
   totalMarks             Float                         @default(0)
   passingMarks           Float?
-  maxAttempts            Int                           @default(1)
+  maxAttempts            Int                           @default(3)
+  attemptScoringPolicy   AttemptScoringPolicy          @default(BEST)
   startAt                DateTime?
   endAt                  DateTime?
   resultVisibility       ResultVisibility              @default(AFTER_END)
@@ -1049,6 +1063,7 @@ model Assessment {
   studentAssignments     AssessmentStudentAssignment[]
   submissions            Submission[]
   testAttempts           TestAttempt[]
+  attemptGrants          AssessmentAttemptGrant[]
   results                Result[]
   blueprints             AssessmentBlueprint[]
   deletedAt              DateTime?
@@ -1627,6 +1642,27 @@ model AssessmentStudentAssignment {
 
   @@unique([assessmentId, studentProfileId])
   @@index([studentProfileId])
+}
+
+model AssessmentAttemptGrant {
+  id                 String     @id @default(cuid())
+  collegeId          String
+  college            College    @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  assessmentId       String
+  assessment         Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            User       @relation("AttemptGrantStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  additionalAttempts Int        @default(0)
+  resetBefore        DateTime?
+  reason             String?
+  createdById        String?
+  createdBy          User?      @relation("AttemptGrantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@unique([assessmentId, studentId])
+  @@index([collegeId])
+  @@index([studentId])
 }
 
 model Submission {

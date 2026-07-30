@@ -158,6 +158,13 @@ export class SubmitAttemptDto {
   reason?: string;
 }
 
+export class AttemptAdminActionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
 export class UpdateReviewDto {
   @Transform(({ value }) => Number(value))
   @IsNumber()

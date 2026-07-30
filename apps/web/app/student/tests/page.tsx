@@ -62,46 +62,60 @@ export default function StudentTestsPage() {
           <div className="empty-panel">No tests found for this view.</div>
         )}
         <div className="exam-list">
-          {items.map((item) => (
-            <article className="exam-row" key={item.id}>
-              <div>
-                <span className="eyebrow">{item.windowState}</span>
-                <h2>{item.title}</h2>
-                <p>
-                  {item.questionCount} questions · {item.durationMinutes}{" "}
-                  minutes · {item.totalMarks} marks
-                </p>
-              </div>
-              <div className="exam-actions">
-                {item.publishedResultId && (
-                  <Link
-                    className="secondary-action"
-                    href={`/student/results/${item.publishedResultId}`}
-                  >
-                    <CheckCircle2 aria-hidden="true" />
-                    Result
-                  </Link>
-                )}
-                {item.latestAttempt?.status === "IN_PROGRESS" ? (
-                  <Link
-                    className="primary-action"
-                    href={`/student/attempts/${item.latestAttempt.id}`}
-                  >
-                    <PlayCircle aria-hidden="true" />
-                    Resume
-                  </Link>
-                ) : (
-                  <Link
-                    className="primary-action"
-                    href={`/student/tests/${item.id}/instructions`}
-                  >
-                    <CalendarClock aria-hidden="true" />
-                    Instructions
-                  </Link>
-                )}
-              </div>
-            </article>
-          ))}
+          {items.map((item) => {
+            const attemptsUsed = item.attemptsUsed;
+            const attemptsRemaining = item.attemptsRemaining;
+            const exhausted = attemptsRemaining <= 0;
+            return (
+              <article className="exam-row" key={item.id}>
+                <div>
+                  <span className="eyebrow">{item.windowState}</span>
+                  <h2>{item.title}</h2>
+                  <p>
+                    {item.questionCount} questions - {item.durationMinutes}{" "}
+                    minutes - {item.totalMarks} marks
+                  </p>
+                  <p className="body-copy">
+                    Attempt {Math.min(attemptsUsed + 1, item.maxAttempts)} of{" "}
+                    {item.maxAttempts} - {attemptsRemaining} remaining
+                  </p>
+                </div>
+                <div className="exam-actions">
+                  {item.publishedResultId && (
+                    <Link
+                      className="secondary-action"
+                      href={`/student/results/${item.publishedResultId}`}
+                    >
+                      <CheckCircle2 aria-hidden="true" />
+                      Result
+                    </Link>
+                  )}
+                  {item.latestAttempt?.status === "IN_PROGRESS" ? (
+                    <Link
+                      className="primary-action"
+                      href={`/student/attempts/${item.latestAttempt.id}`}
+                    >
+                      <PlayCircle aria-hidden="true" />
+                      Resume
+                    </Link>
+                  ) : exhausted ? (
+                    <button className="secondary-action" disabled type="button">
+                      <CalendarClock aria-hidden="true" />
+                      Attempts Used
+                    </button>
+                  ) : (
+                    <Link
+                      className="primary-action"
+                      href={`/student/tests/${item.id}/instructions`}
+                    >
+                      <CalendarClock aria-hidden="true" />
+                      {attemptsUsed > 0 ? "Retry Test" : "Start Attempt"}
+                    </Link>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
     </AuthShell>

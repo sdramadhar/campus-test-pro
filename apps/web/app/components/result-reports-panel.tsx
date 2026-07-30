@@ -28,12 +28,28 @@ interface ResultReportResponse {
   charts: Record<string, Array<{ label: string; value: number }>>;
 }
 
+interface AttemptAdminRow {
+  id: string;
+  studentId: string;
+  studentName: string;
+  rollNumber?: string | null;
+  attemptNumber: number;
+  status: string;
+  score?: number | null;
+  percentage?: number | null;
+  startedAt: string;
+  submittedAt?: string | null;
+  durationSeconds?: number | null;
+  violations: number;
+}
+
 export function ResultReportsPanel({
   assessmentId,
 }: {
   assessmentId?: string;
 }) {
   const [rows, setRows] = useState<ResultReportRow[]>([]);
+  const [attemptRows, setAttemptRows] = useState<AttemptAdminRow[]>([]);
   const [totals, setTotals] = useState<Record<string, number>>({});
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -58,6 +74,12 @@ export function ResultReportsPanel({
       );
       setRows(response.data.data);
       setTotals(response.data.totals);
+      if (assessmentId) {
+        const attemptsResponse = await analyticsRequest<AttemptAdminRow[]>(
+          `/api/v1/assessments/${assessmentId}/attempts`,
+        );
+        setAttemptRows(attemptsResponse.data);
+      }
       setStatus("ready");
     } catch (error) {
       setMessage(
@@ -89,6 +111,36 @@ export function ResultReportsPanel({
     link.click();
     URL.revokeObjectURL(url);
     setMessage("CSV export downloaded.");
+  }
+
+  async function attemptAction(
+    studentId: string,
+    action: "reset" | "grant",
+  ): Promise<void> {
+    if (!assessmentId) return;
+    setMessage("");
+    const response = await authenticatedFetch(
+      `/api/v1/assessments/${assessmentId}/attempts/${studentId}/${action}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          reason:
+            action === "reset"
+              ? "Admin reset from results panel"
+              : "Admin granted one additional attempt",
+        }),
+      },
+    );
+    if (!response.ok) {
+      setMessage(await responseErrorMessage(response));
+      return;
+    }
+    setMessage(
+      action === "reset"
+        ? "Student attempts reset."
+        : "One additional attempt granted.",
+    );
+    await load();
   }
 
   return (
@@ -205,6 +257,64 @@ export function ResultReportsPanel({
           </div>
         )}
       </section>
+
+      {assessmentId && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Attempt Administration</h2>
+            <span>{attemptRows.length.toString()} attempt(s)</span>
+          </div>
+          {attemptRows.length === 0 ? (
+            <div className="empty-state">No attempts have started yet.</div>
+          ) : (
+            <div className="data-table">
+              <div className="data-row result-report-row data-head">
+                <span>Student</span>
+                <span>Attempt</span>
+                <span>Status</span>
+                <span>Score</span>
+                <span>Started</span>
+                <span>Submitted</span>
+                <span>Violations</span>
+                <span>Actions</span>
+              </div>
+              {attemptRows.map((attempt) => (
+                <div className="data-row result-report-row" key={attempt.id}>
+                  <span>{attempt.studentName}</span>
+                  <span>{attempt.attemptNumber}</span>
+                  <span>{attempt.status}</span>
+                  <span>
+                    {attempt.score === null || attempt.score === undefined
+                      ? "-"
+                      : `${attempt.score.toString()} (${(attempt.percentage ?? 0).toString()}%)`}
+                  </span>
+                  <span>{new Date(attempt.startedAt).toLocaleString()}</span>
+                  <span>
+                    {attempt.submittedAt
+                      ? new Date(attempt.submittedAt).toLocaleString()
+                      : "-"}
+                  </span>
+                  <span>{attempt.violations}</span>
+                  <span className="row-actions">
+                    <button
+                      onClick={() => void attemptAction(attempt.studentId, "reset")}
+                      type="button"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      onClick={() => void attemptAction(attempt.studentId, "grant")}
+                      type="button"
+                    >
+                      Grant +1
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </section>
   );
 }

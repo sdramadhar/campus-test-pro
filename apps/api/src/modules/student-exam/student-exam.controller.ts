@@ -19,6 +19,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import {
   AttemptEventDto,
+  AttemptAdminActionDto,
   BatchSaveAnswersDto,
   SaveAnswerDto,
   StartAttemptDto,
@@ -203,6 +204,34 @@ export class AssessmentResultsController {
     @Param("assessmentId") assessmentId: string,
   ) {
     return this.service.unpublishResults(user, assessmentId);
+  }
+
+  @Get(":assessmentId/attempts")
+  attempts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("assessmentId") assessmentId: string,
+  ) {
+    return this.service.assessmentAttempts(user, assessmentId);
+  }
+
+  @Post(":assessmentId/attempts/:studentId/reset")
+  resetAttempts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("assessmentId") assessmentId: string,
+    @Param("studentId") studentId: string,
+    @Body() dto: AttemptAdminActionDto,
+  ) {
+    return this.service.resetStudentAttempts(user, assessmentId, studentId, dto);
+  }
+
+  @Post(":assessmentId/attempts/:studentId/grant")
+  grantAttempt(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("assessmentId") assessmentId: string,
+    @Param("studentId") studentId: string,
+    @Body() dto: AttemptAdminActionDto,
+  ) {
+    return this.service.grantStudentAttempt(user, assessmentId, studentId, dto);
   }
 }
 

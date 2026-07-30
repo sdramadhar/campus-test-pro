@@ -13,6 +13,8 @@ export type ProctoringEventType =
   | "FORBIDDEN_SHORTCUT"
   | "NETWORK_DISCONNECT"
   | "NETWORK_RECONNECT"
+  | "CAMERA_DISABLED"
+  | "PAGE_RELOAD_ATTEMPT"
   | "WEBCAM_PERMISSION_GRANTED"
   | "WEBCAM_PERMISSION_DENIED"
   | "CAMERA_SNAPSHOT_CAPTURED"
@@ -24,6 +26,9 @@ export interface StudentProctoringPolicy {
   fullscreenRequired?: boolean;
   cameraRequired?: boolean;
   retentionDays?: number;
+  warningThreshold?: number;
+  flagThreshold?: number;
+  autoSubmitOnCriticalViolation?: boolean;
 }
 
 export interface ProctoringRuntimePolicy {
@@ -59,8 +64,12 @@ export function resolveRuntimePolicy(
     fullscreenRequired:
       policy?.fullscreenRequired === true || fullscreenPreferred,
     cameraRequired: policy?.cameraRequired === true && proctoringEnabled,
-    autoSubmitOnCriticalViolation: proctoringEnabled,
-    violationLimit: strictProctoringDefaults.violationLimit,
+    autoSubmitOnCriticalViolation:
+      policy?.autoSubmitOnCriticalViolation ?? proctoringEnabled,
+    violationLimit:
+      policy?.flagThreshold ??
+      policy?.warningThreshold ??
+      strictProctoringDefaults.violationLimit,
     gracePeriodMs: strictProctoringDefaults.gracePeriodMs,
     evidenceIntervalMs: strictProctoringDefaults.evidenceIntervalMs,
   };
@@ -112,6 +121,7 @@ export function eventSeverity(
 ): "info" | "warning" | "critical" {
   if (
     eventType === "WEBCAM_PERMISSION_DENIED" ||
+    eventType === "CAMERA_DISABLED" ||
     eventType === "IDENTITY_CHECK_FAILED"
   )
     return "critical";

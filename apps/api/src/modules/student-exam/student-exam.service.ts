@@ -19,12 +19,14 @@ import {
   ResultVisibility,
   Role,
   TestAttemptStatus,
+  AttemptScoringPolicy,
 } from "../../../generated/phase5-client";
 import { AuthenticatedUser } from "../auth/auth.types";
 import { ExamOperationsService } from "../exam-operations/exam-operations.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AttemptEventDto,
+  AttemptAdminActionDto,
   BatchSaveAnswersDto,
   SaveAnswerDto,
   StartAttemptDto,
@@ -49,6 +51,14 @@ const manualTypes = new Set<QuestionType>([
 ]);
 const activeAttemptStatuses = [
   TestAttemptStatus.IN_PROGRESS,
+] as TestAttemptStatus[];
+const countedAttemptStatuses = [
+  TestAttemptStatus.IN_PROGRESS,
+  TestAttemptStatus.SUBMITTED,
+  TestAttemptStatus.AUTO_SUBMITTED,
+  TestAttemptStatus.EXPIRED,
+  TestAttemptStatus.UNDER_REVIEW,
+  TestAttemptStatus.EVALUATED,
 ] as TestAttemptStatus[];
 
 @Injectable()
@@ -86,10 +96,15 @@ export class StudentExamService {
           testAttempts: {
             where: { studentId: user.id },
             orderBy: { attemptNumber: "desc" },
-            take: 1,
           },
           results: {
             where: this.studentVisibleResultWhere(user.id),
+            include: {
+              attempt: { select: { attemptNumber: true } },
+            },
+          },
+          attemptGrants: {
+            where: { studentId: user.id },
             take: 1,
           },
         },
@@ -126,7 +141,13 @@ export class StudentExamService {
           where: { studentId: user.id },
           orderBy: { attemptNumber: "desc" },
         },
-        results: { where: this.studentVisibleResultWhere(user.id), take: 1 },
+        results: {
+          where: this.studentVisibleResultWhere(user.id),
+          include: {
+            attempt: { select: { attemptNumber: true } },
+          },
+        },
+        attemptGrants: { where: { studentId: user.id }, take: 1 },
       },
     });
     if (!assessment) {
@@ -202,6 +223,12 @@ export class StudentExamService {
       if (!assessment) {
         throw new NotFoundException("Assessment is not available.");
       }
+      await this.validateStartProctoringReadiness(
+        tx,
+        profile.collegeId,
+        assessmentId,
+        dto.clientStartMetadata,
+      );
 
       const activeAttempt = await tx.testAttempt.findFirst({
         where: {
@@ -215,16 +242,31 @@ export class StudentExamService {
         return activeAttempt;
       }
 
+      const grant = await tx.assessmentAttemptGrant.findUnique({
+        where: {
+          assessmentId_studentId: { assessmentId, studentId: user.id },
+        },
+      });
+      const attemptWhere: Prisma.TestAttemptWhereInput = {
+        assessmentId,
+        studentId: user.id,
+        status: { in: countedAttemptStatuses },
+      };
+      if (grant?.resetBefore) {
+        attemptWhere.createdAt = { gt: grant.resetBefore };
+      }
+      const attemptLimit =
+        assessment.maxAttempts + Math.max(0, grant?.additionalAttempts ?? 0);
       const [attemptCount, latestAttempt] = await Promise.all([
-        tx.testAttempt.count({ where: { assessmentId, studentId: user.id } }),
+        tx.testAttempt.count({ where: attemptWhere }),
         tx.testAttempt.findFirst({
           where: { assessmentId, studentId: user.id },
           orderBy: { attemptNumber: "desc" },
           select: { attemptNumber: true },
         }),
       ]);
-      if (attemptCount >= assessment.maxAttempts) {
-        throw new ForbiddenException("Maximum attempts reached.");
+      if (attemptCount >= attemptLimit) {
+        throw new ForbiddenException("Maximum attempt limit reached.");
       }
 
       const now = new Date();
@@ -335,7 +377,7 @@ export class StudentExamService {
         submitReason: null,
       });
       return created;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     if (attempt.status === TestAttemptStatus.IN_PROGRESS) {
       await this.operations
@@ -891,6 +933,130 @@ export class StudentExamService {
       },
     });
     return { success: true, data: { unpublished: true } };
+  }
+
+  async assessmentAttempts(user: AuthenticatedUser, assessmentId: string) {
+    await this.ensureAssessmentManagementAccess(user, assessmentId);
+    const attempts = await this.prisma.testAttempt.findMany({
+      where: { assessmentId },
+      include: {
+        student: { include: { studentProfile: true } },
+        result: true,
+        securityFlags: true,
+        submissionReceipt: true,
+      },
+      orderBy: [{ student: { name: "asc" } }, { attemptNumber: "asc" }],
+    });
+    return {
+      success: true,
+      data: attempts.map((attempt) => ({
+        id: attempt.id,
+        studentId: attempt.studentId,
+        studentName: attempt.student.name,
+        rollNumber: attempt.student.studentProfile?.rollNumber ?? null,
+        attemptNumber: attempt.attemptNumber,
+        status: attempt.status,
+        score: attempt.result?.totalScore ?? attempt.finalScore ?? null,
+        percentage: attempt.result?.percentage ?? attempt.percentage ?? null,
+        startedAt: attempt.startedAt,
+        submittedAt:
+          attempt.submittedAt ??
+          attempt.autoSubmittedAt ??
+          attempt.submissionReceipt?.submittedAt ??
+          null,
+        durationSeconds: this.durationTakenSeconds(attempt),
+        violations: attempt.securityFlags.length,
+      })),
+    };
+  }
+
+  async resetStudentAttempts(
+    user: AuthenticatedUser,
+    assessmentId: string,
+    studentId: string,
+    dto: AttemptAdminActionDto,
+  ) {
+    const assessment = await this.ensureAssessmentManagementAccess(
+      user,
+      assessmentId,
+    );
+    this.requireAttemptAdminRole(user);
+    if (!assessment.collegeId) {
+      throw new BadRequestException("Assessment must belong to a college.");
+    }
+    await this.ensureStudentInAssessmentCollege(assessment, studentId);
+    const now = new Date();
+    const grant = await this.prisma.assessmentAttemptGrant.upsert({
+      where: { assessmentId_studentId: { assessmentId, studentId } },
+      update: {
+        resetBefore: now,
+        additionalAttempts: 0,
+        reason: dto.reason,
+        createdById: user.id,
+      },
+      create: {
+        collegeId: assessment.collegeId,
+        assessmentId,
+        studentId,
+        resetBefore: now,
+        additionalAttempts: 0,
+        reason: dto.reason,
+        createdById: user.id,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        event: AuditEvent.ATTEMPT_RESET,
+        userId: user.id,
+        collegeId: assessment.collegeId,
+        actorRole: user.role,
+        metadata: { assessmentId, studentId },
+      },
+    });
+    return { success: true, data: grant };
+  }
+
+  async grantStudentAttempt(
+    user: AuthenticatedUser,
+    assessmentId: string,
+    studentId: string,
+    dto: AttemptAdminActionDto,
+  ) {
+    const assessment = await this.ensureAssessmentManagementAccess(
+      user,
+      assessmentId,
+    );
+    this.requireAttemptAdminRole(user);
+    if (!assessment.collegeId) {
+      throw new BadRequestException("Assessment must belong to a college.");
+    }
+    await this.ensureStudentInAssessmentCollege(assessment, studentId);
+    const grant = await this.prisma.assessmentAttemptGrant.upsert({
+      where: { assessmentId_studentId: { assessmentId, studentId } },
+      update: {
+        additionalAttempts: { increment: 1 },
+        reason: dto.reason,
+        createdById: user.id,
+      },
+      create: {
+        collegeId: assessment.collegeId,
+        assessmentId,
+        studentId,
+        additionalAttempts: 1,
+        reason: dto.reason,
+        createdById: user.id,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        event: AuditEvent.ATTEMPT_GRANT,
+        userId: user.id,
+        collegeId: assessment.collegeId,
+        actorRole: user.role,
+        metadata: { assessmentId, studentId },
+      },
+    });
+    return { success: true, data: grant };
   }
 
   async dashboardStats(user: AuthenticatedUser) {
@@ -1452,6 +1618,12 @@ export class StudentExamService {
     }
   }
 
+  private requireAttemptAdminRole(user: AuthenticatedUser) {
+    if (user.role !== Role.SUPER_ADMIN && user.role !== Role.COLLEGE_ADMIN) {
+      throw new ForbiddenException("Attempt administration is required.");
+    }
+  }
+
   private reviewScopeWhere(
     user: AuthenticatedUser,
   ): Prisma.ManualReviewTaskWhereInput {
@@ -1495,6 +1667,26 @@ export class StudentExamService {
           "Assessment is outside your assigned subjects.",
         );
       }
+    }
+    return assessment;
+  }
+
+  private async ensureStudentInAssessmentCollege(
+    assessment: { collegeId: string | null },
+    studentId: string,
+  ) {
+    const student = await this.prisma.user.findFirst({
+      where: {
+        id: studentId,
+        role: Role.STUDENT,
+        collegeId: assessment.collegeId ?? undefined,
+      },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new NotFoundException(
+        "Student is not available for this assessment.",
+      );
     }
   }
 
@@ -1571,6 +1763,7 @@ export class StudentExamService {
       totalMarks: number;
       passingMarks?: number | null;
       maxAttempts: number;
+      attemptScoringPolicy: AttemptScoringPolicy;
       startAt?: Date | null;
       endAt?: Date | null;
       opensAt?: Date | null;
@@ -1584,13 +1777,37 @@ export class StudentExamService {
         id: string;
         status: TestAttemptStatus;
         attemptNumber: number;
+        createdAt?: Date;
       }>;
-      results?: Array<{ id: string; isPublished: boolean }>;
+      results?: Array<{
+        id: string;
+        isPublished: boolean;
+        totalScore?: number;
+        createdAt?: Date;
+        attempt?: { attemptNumber: number } | null;
+      }>;
+      attemptGrants?: Array<{
+        additionalAttempts: number;
+        resetBefore?: Date | null;
+      }>;
     },
     now: Date,
   ) {
     const startsAt = assessment.startAt ?? assessment.opensAt ?? null;
     const endsAt = assessment.endAt ?? assessment.closesAt ?? null;
+    const grant = assessment.attemptGrants?.[0] ?? null;
+    const usedAttempts = (assessment.testAttempts ?? []).filter((attempt) => {
+      if (!countedAttemptStatuses.includes(attempt.status)) return false;
+      if (!grant?.resetBefore || !attempt.createdAt) return true;
+      return attempt.createdAt > grant.resetBefore;
+    }).length;
+    const allowedAttempts =
+      assessment.maxAttempts + Math.max(0, grant?.additionalAttempts ?? 0);
+    const latestAttempt = assessment.testAttempts?.[0] ?? null;
+    const finalResult = this.selectFinalResult(
+      assessment.results ?? [],
+      assessment.attemptScoringPolicy,
+    );
     return {
       id: assessment.id,
       title: assessment.title,
@@ -1599,6 +1816,7 @@ export class StudentExamService {
       totalMarks: assessment.totalMarks,
       passingMarks: assessment.passingMarks,
       maxAttempts: assessment.maxAttempts,
+      attemptScoringPolicy: assessment.attemptScoringPolicy,
       startAt: startsAt,
       endAt: endsAt,
       status: assessment.status,
@@ -1609,10 +1827,48 @@ export class StudentExamService {
             ? "CLOSED"
             : "OPEN",
       questionCount: assessment.assessmentQuestions?.length ?? 0,
-      latestAttempt: assessment.testAttempts?.[0] ?? null,
-      publishedResultId: assessment.results?.[0]?.id ?? null,
+      latestAttempt,
+      attemptsUsed: usedAttempts,
+      attemptsRemaining: Math.max(0, allowedAttempts - usedAttempts),
+      nextAttemptNumber: usedAttempts + 1,
+      publishedResultId: finalResult?.id ?? null,
       negativeMarkingEnabled: assessment.negativeMarkingEnabled,
     };
+  }
+
+  private selectFinalResult(
+    results: Array<{
+      id: string;
+      totalScore?: number;
+      createdAt?: Date;
+      attempt?: { attemptNumber: number } | null;
+    }>,
+    policy: AttemptScoringPolicy,
+  ) {
+    if (!results.length) return null;
+    const ordered = [...results];
+    if (policy === AttemptScoringPolicy.FIRST) {
+      ordered.sort(
+        (left, right) =>
+          (left.attempt?.attemptNumber ?? 0) - (right.attempt?.attemptNumber ?? 0),
+      );
+      return ordered[0];
+    }
+    if (policy === AttemptScoringPolicy.LATEST) {
+      ordered.sort(
+        (left, right) =>
+          (right.attempt?.attemptNumber ?? 0) - (left.attempt?.attemptNumber ?? 0),
+      );
+      return ordered[0];
+    }
+    ordered.sort((left, right) => {
+      const scoreDelta = (right.totalScore ?? 0) - (left.totalScore ?? 0);
+      if (scoreDelta !== 0) return scoreDelta;
+      return (
+        (right.createdAt?.getTime() ?? 0) - (left.createdAt?.getTime() ?? 0)
+      );
+    });
+    return ordered[0];
   }
 
   private publicEligibility(
@@ -1645,6 +1901,40 @@ export class StudentExamService {
       errors.push("Assessment has no questions.");
     }
     return { eligible: errors.length === 0, errors };
+  }
+
+  private async validateStartProctoringReadiness(
+    tx: Tx,
+    collegeId: string,
+    assessmentId: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    const policy = await tx.proctoringPolicy.findFirst({
+      where: {
+        active: true,
+        OR: [
+          { assessmentId },
+          { collegeId, isDefault: true },
+          { collegeId: null, isDefault: true },
+        ],
+      },
+      orderBy: [
+        { assessmentId: "desc" },
+        { isDefault: "desc" },
+        { updatedAt: "desc" },
+      ],
+    });
+    const proctoringEnabled = policy?.proctoringEnabled ?? true;
+    const cameraRequired = proctoringEnabled && (policy?.webcamRequired ?? true);
+    const fullscreenRequired = policy?.fullscreenRequired ?? true;
+    if (cameraRequired && metadata?.cameraReady !== true) {
+      throw new ForbiddenException(
+        "Camera permission is required before starting.",
+      );
+    }
+    if (fullscreenRequired && metadata?.fullscreenReady !== true) {
+      throw new ForbiddenException("Fullscreen mode is required before starting.");
+    }
   }
 
   private resultVisibilityState(assessment: {
@@ -1961,6 +2251,19 @@ export class StudentExamService {
     return Math.max(
       0,
       Math.floor((expiresAt.getTime() - from.getTime()) / 1000),
+    );
+  }
+
+  private durationTakenSeconds(attempt: {
+    startedAt: Date;
+    submittedAt?: Date | null;
+    autoSubmittedAt?: Date | null;
+  }) {
+    const submittedAt = attempt.submittedAt ?? attempt.autoSubmittedAt ?? null;
+    if (!submittedAt) return null;
+    return Math.max(
+      0,
+      Math.floor((submittedAt.getTime() - attempt.startedAt.getTime()) / 1000),
     );
   }
 

@@ -149,7 +149,10 @@ export const assessmentSchema = z.object({
   subjectId: z.string().optional(),
   durationMinutes: z.coerce.number().int().min(1),
   passingMarks: z.union([z.coerce.number().min(0), z.literal("")]).optional(),
-  maxAttempts: z.coerce.number().int().min(1),
+  maxAttempts: z.coerce.number().int().min(1).max(10),
+  attemptScoringPolicy: z
+    .enum(["BEST", "LATEST", "FIRST"])
+    .default("BEST"),
   shuffleQuestions: z.boolean().default(false),
   shuffleOptions: z.boolean().default(false),
 });

@@ -202,11 +202,21 @@ export default function StudentAttemptPage({
         void recordProctoringEvent("TAB_VISIBLE");
       }
     };
+    const onPageHide = () => {
+      void recordProctoringEvent("PAGE_RELOAD_ATTEMPT");
+    };
+    const onBeforeUnload = () => {
+      void recordProctoringEvent("PAGE_RELOAD_ATTEMPT");
+    };
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
     };
   }, [attemptId, proctoringPolicy]);
 
@@ -380,13 +390,13 @@ export default function StudentAttemptPage({
         stream.getVideoTracks().forEach((track) => {
           track.addEventListener("ended", () => {
             setCameraState("stopped");
-            void recordProctoringEvent("IDENTITY_CHECK_FAILED");
+            void recordProctoringEvent("CAMERA_DISABLED");
           });
           track.addEventListener("mute", () => {
             setCameraState("muted");
             window.setTimeout(() => {
               if (cameraState !== "active") {
-                void recordProctoringEvent("IDENTITY_CHECK_FAILED");
+                void recordProctoringEvent("CAMERA_DISABLED");
               }
             }, proctoringPolicy.gracePeriodMs);
           });

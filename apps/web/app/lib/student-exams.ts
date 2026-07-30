@@ -13,6 +13,10 @@ export interface StudentAssessment {
   totalMarks: number;
   passingMarks?: number | null;
   maxAttempts: number;
+  attemptScoringPolicy?: "BEST" | "LATEST" | "FIRST";
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  nextAttemptNumber: number;
   startAt?: string | null;
   endAt?: string | null;
   status: string;

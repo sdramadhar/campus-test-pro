@@ -35,7 +35,8 @@ const emptyAssessment: AssessmentFormValues = {
   subjectId: "",
   durationMinutes: 60,
   passingMarks: "",
-  maxAttempts: 1,
+  maxAttempts: 3,
+  attemptScoringPolicy: "BEST",
   shuffleQuestions: false,
   shuffleOptions: false,
 };
@@ -302,7 +303,14 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
             response.data.passingMarks === null
               ? ""
               : Number(response.data.passingMarks ?? ""),
-          maxAttempts: Number(response.data.maxAttempts ?? 1),
+          maxAttempts: Number(response.data.maxAttempts ?? 3),
+          attemptScoringPolicy:
+            readValue(response.data, "attemptScoringPolicy") === "-"
+              ? "BEST"
+              : (readValue(response.data, "attemptScoringPolicy") as
+                  | "BEST"
+                  | "LATEST"
+                  | "FIRST"),
           shuffleQuestions: Boolean(response.data.shuffleQuestions),
           shuffleOptions: Boolean(response.data.shuffleOptions),
         });
@@ -535,6 +543,23 @@ export function AssessmentBuilder({ assessmentId }: { assessmentId?: string }) {
             <label className="form-field">
               Passing Marks
               <input type="number" {...form.register("passingMarks")} />
+            </label>
+            <label className="form-field">
+              Maximum Attempts
+              <input
+                max={10}
+                min={1}
+                type="number"
+                {...form.register("maxAttempts")}
+              />
+            </label>
+            <label className="form-field">
+              Result Scoring Policy
+              <select {...form.register("attemptScoringPolicy")}>
+                <option value="BEST">Best score</option>
+                <option value="LATEST">Latest attempt</option>
+                <option value="FIRST">First attempt</option>
+              </select>
             </label>
             <label className="form-field wide-field">
               Instructions

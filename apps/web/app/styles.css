@@ -931,6 +931,17 @@ h1 {
   width: 100%;
 }
 
+.camera-preview {
+  aspect-ratio: 16 / 9;
+  background: #0f172a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  max-width: 420px;
+  object-fit: cover;
+  width: 100%;
+}
+
 .proctoring-status-grid {
   color: var(--muted);
   display: flex;
