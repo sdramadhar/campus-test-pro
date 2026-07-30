@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -60,6 +61,11 @@ const examExitViolationEvents = new Set<ProctoringEventType>([
   ProctoringEventType.BACK_NAVIGATION_ATTEMPT,
   ProctoringEventType.PAGE_RELOAD_ATTEMPT,
 ]);
+const examRecoveryEvents = new Set<ProctoringEventType>([
+  ProctoringEventType.FULLSCREEN_ENTER,
+  ProctoringEventType.TAB_VISIBLE,
+  ProctoringEventType.WINDOW_FOCUS,
+]);
 const violationCorrelationMs = 2500;
 
 type SessionPatch = Pick<
@@ -73,8 +79,18 @@ type SessionPatch = Pick<
   | "sessionChallengeUntil"
 >;
 
+export interface ViolationPolicyAction {
+  previousViolationCount: number;
+  newViolationCount: number;
+  allowedExamExitViolations: number;
+  shouldAutoSubmit: boolean;
+  submitReason?: "PROCTORING_VIOLATION_LIMIT" | ProctoringEventType;
+}
+
 @Injectable()
 export class ProctoringService {
+  private readonly logger = new Logger(ProctoringService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(RedisService) private readonly redis: RedisService,
@@ -305,6 +321,7 @@ export class ProctoringService {
     }
     const session = await this.ensureSession(attempt);
     const created = [];
+    let latestPolicyAction: ViolationPolicyAction | null = null;
     for (const event of dto.events) {
       const createdEvent = await this.recordEvent(
         session,
@@ -315,7 +332,10 @@ export class ProctoringService {
           clientTimestamp: event.clientTimestamp,
         },
       );
-      if (createdEvent) created.push(createdEvent);
+      if (createdEvent?.event) created.push(createdEvent.event);
+      if (createdEvent?.policyAction) {
+        latestPolicyAction = createdEvent.policyAction;
+      }
     }
     const updated = await this.recalculateRisk(session.id);
     const finalAttempt = await this.prisma.testAttempt.findUnique({
@@ -345,6 +365,17 @@ export class ProctoringService {
         updated.warningCount > allowedViolationLimit
           ? "PROCTORING_VIOLATION_LIMIT"
           : undefined,
+      diagnostics: latestPolicyAction ?? {
+        previousViolationCount: updated.warningCount,
+        newViolationCount: updated.warningCount,
+        allowedExamExitViolations: allowedViolationLimit,
+        shouldAutoSubmit:
+          finalAttempt?.status === TestAttemptStatus.AUTO_SUBMITTED,
+        submitReason:
+          finalAttempt?.status === TestAttemptStatus.AUTO_SUBMITTED
+            ? "PROCTORING_VIOLATION_LIMIT"
+            : undefined,
+      },
       warnings: await this.pendingWarnings(session.id),
     });
   }
@@ -1044,6 +1075,16 @@ export class ProctoringService {
     if (!examExitViolationEvents.has(eventType) && !criticalEvents.has(eventType)) {
       return true;
     }
+    const recovered = await this.prisma.proctoringEvent.findFirst({
+      where: {
+        sessionId,
+        eventType: { in: Array.from(examRecoveryEvents) },
+        createdAt: { gte: new Date(Date.now() - violationCorrelationMs) },
+      },
+      select: { id: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (recovered) return true;
     const recent = await this.prisma.proctoringEvent.findFirst({
       where: {
         sessionId,
@@ -1104,14 +1145,15 @@ export class ProctoringService {
           riskDelta: effectiveRiskDelta,
         },
       });
+      let policyAction: ViolationPolicyAction | null = null;
       if (effectiveRiskDelta > 0 || criticalEvents.has(eventType)) {
-        await this.applyPolicyAction(
+        policyAction = await this.applyPolicyAction(
           session.id,
           eventType,
           effectiveRiskDelta,
         );
       }
-      return event;
+      return { event, policyAction };
     } catch (error) {
       if (this.isUniqueError(error)) return null;
       throw error;
@@ -1122,7 +1164,7 @@ export class ProctoringService {
     sessionId: string,
     eventType: ProctoringEventType,
     riskDelta: number,
-  ) {
+  ): Promise<ViolationPolicyAction> {
     const session = await this.prisma.proctoringSession.findUniqueOrThrow({
       where: { id: sessionId },
     });
@@ -1160,15 +1202,19 @@ export class ProctoringService {
     ) {
       await this.ensureReview(session, `Review indicator: ${eventType}`);
     }
-    if (
+    const shouldAutoSubmitForLimit =
+      updated.warningCount > allowedViolationLimit;
+    const shouldAutoSubmitForCritical =
       snapshot.autoSubmitOnCriticalViolation === true &&
-      (criticalEvents.has(eventType) ||
-        updated.warningCount > allowedViolationLimit)
-    ) {
-      const reason =
-        updated.warningCount > allowedViolationLimit
-          ? "PROCTORING_VIOLATION_LIMIT"
-          : eventType;
+      criticalEvents.has(eventType);
+    const shouldAutoSubmit =
+      shouldAutoSubmitForLimit || shouldAutoSubmitForCritical;
+    const reason =
+      shouldAutoSubmitForLimit ? "PROCTORING_VIOLATION_LIMIT" : eventType;
+    this.logger.warn(
+      `Proctoring violation policy: sessionId=${sessionId} attemptId=${session.attemptId} eventType=${eventType} previousViolationCount=${String(session.warningCount)} newViolationCount=${String(updated.warningCount)} allowedExamExitViolations=${String(allowedViolationLimit)} shouldAutoSubmit=${String(shouldAutoSubmit)} submitReason=${shouldAutoSubmit ? reason : "NONE"}`,
+    );
+    if (shouldAutoSubmit) {
       await this.autoSubmitAttemptForProctoring(session, reason);
       await this.recordEvent(
         session,
@@ -1178,6 +1224,13 @@ export class ProctoringService {
         { reason, serverEnforced: true },
       );
     }
+    return {
+      previousViolationCount: session.warningCount,
+      newViolationCount: updated.warningCount,
+      allowedExamExitViolations: allowedViolationLimit,
+      shouldAutoSubmit,
+      submitReason: shouldAutoSubmit ? reason : undefined,
+    };
   }
 
   private async autoSubmitAttemptForProctoring(

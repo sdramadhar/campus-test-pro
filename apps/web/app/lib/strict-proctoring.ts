@@ -156,6 +156,13 @@ export interface ProctoringEventBatchResult {
   remainingChances: number;
   autoSubmitted: boolean;
   submitReason?: string;
+  diagnostics?: {
+    previousViolationCount: number;
+    newViolationCount: number;
+    allowedExamExitViolations: number;
+    shouldAutoSubmit: boolean;
+    submitReason?: string;
+  };
   session?: { status?: string; warningCount?: number; flagCount?: number };
 }
 

@@ -13,12 +13,19 @@ function main(): void {
   assert(schema.includes("BACK_NAVIGATION_ATTEMPT"));
   assert(service.includes("examExitViolationEvents"));
   assert(service.includes("violationCorrelationMs"));
+  assert(service.includes("examRecoveryEvents"));
   assert(service.includes("shouldCountViolation"));
   assert(service.includes("allowedViolationLimit"));
+  assert(service.includes("previousViolationCount"));
+  assert(service.includes("newViolationCount"));
+  assert(service.includes("allowedExamExitViolations"));
+  assert(service.includes("shouldAutoSubmit"));
   assert(service.includes("remainingChances"));
   assert(service.includes("updated.warningCount > allowedViolationLimit"));
+  assert(service.includes("shouldAutoSubmitForLimit"));
   assert(service.includes("PROCTORING_VIOLATION_LIMIT"));
   assert(service.includes("autoSubmitted"));
+  assert(service.includes("finalAttempt?.status === TestAttemptStatus.AUTO_SUBMITTED"));
 
   console.log("Proctoring violation policy tests passed.");
 }

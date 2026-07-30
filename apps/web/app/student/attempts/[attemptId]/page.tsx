@@ -64,12 +64,12 @@ export default function StudentAttemptPage({
   const [violationCount, setViolationCount] = useState(0);
   const [remainingChances, setRemainingChances] = useState(2);
   const [warningState, setWarningState] = useState<WarningState>(null);
+  const [serverAutoSubmitted, setServerAutoSubmitted] = useState(false);
   const timerRef = useRef<number | undefined>(undefined);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const alarmRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const proctorSequenceRef = useRef(1);
-  const lastEventRef = useRef(new Map<string, number>());
   const lastViolationBurstRef = useRef(0);
   const autoSubmitRef = useRef(false);
   const queueKey = `campustest-answer-queue-${attemptId}`;
@@ -189,12 +189,15 @@ export default function StudentAttemptPage({
 
   useEffect(() => {
     const interval = window.setInterval(() => {
+      if (autoSubmitRef.current || serverAutoSubmitted) {
+        return;
+      }
       setRemaining((value) => (value === null ? null : Math.max(0, value - 1)));
     }, 1000);
     return () => {
       window.clearInterval(interval);
     };
-  }, []);
+  }, [serverAutoSubmitted]);
 
   useEffect(() => {
     document.body.classList.add("exam-body-lock");
@@ -354,10 +357,7 @@ export default function StudentAttemptPage({
 
   useEffect(() => {
     return () => {
-      streamRef.current?.getTracks().forEach((track) => {
-        track.stop();
-      });
-      streamRef.current = null;
+      stopCameraStream();
     };
   }, []);
 
@@ -381,12 +381,6 @@ export default function StudentAttemptPage({
   async function recordProctoringEvent(
     eventType: ProctoringEventType,
   ): Promise<void> {
-    const now = Date.now();
-    const last = lastEventRef.current.get(eventType) ?? 0;
-    if (now - last < 2000) {
-      return;
-    }
-    lastEventRef.current.set(eventType, now);
     const event = createProctoringEvent(eventType, nextProctorSequence());
     const result = await sendProctoringEventBatch(attemptId, [event]).catch(
       () => null,
@@ -396,9 +390,20 @@ export default function StudentAttemptPage({
       setRemainingChances(result.remainingChances);
       if (result.autoSubmitted) {
         autoSubmitRef.current = true;
+        setServerAutoSubmitted(true);
         setAutoSubmitting(true);
         setMessage("Proctoring limits reached. Submitting automatically...");
-        router.replace(`/student/attempts/${attemptId}/submitted`);
+        stopCameraStream();
+        setWarningState({
+          eventType,
+          violationCount: result.violationCount,
+          remainingChances: 0,
+          finalWarning: true,
+          message: "Exam automatically submitted.",
+        });
+        window.setTimeout(() => {
+          router.replace(`/student/attempts/${attemptId}/submitted`);
+        }, 1200);
         return;
       }
     }
@@ -449,6 +454,14 @@ export default function StudentAttemptPage({
       audio.pause();
       audio.currentTime = 0;
     }, 3500);
+  }
+
+  function stopCameraStream(): void {
+    streamRef.current?.getTracks().forEach((track) => {
+      track.stop();
+    });
+    streamRef.current = null;
+    setCameraState("stopped");
   }
 
   async function beginProctoredAttempt(): Promise<void> {
@@ -601,7 +614,7 @@ export default function StudentAttemptPage({
     value: unknown,
     markedForReview = nextQuestion.answer?.markedForReview ?? false,
   ): void {
-    if (warningState) {
+    if (warningState || serverAutoSubmitted) {
       return;
     }
     const body = answerBody(nextQuestion, value, markedForReview);
@@ -639,7 +652,7 @@ export default function StudentAttemptPage({
   }
 
   async function clearAnswer(): Promise<void> {
-    if (!question || warningState) {
+    if (!question || warningState || serverAutoSubmitted) {
       return;
     }
     await studentExamRequest<SavedAnswer>(
@@ -753,8 +766,12 @@ export default function StudentAttemptPage({
           !strictModeRequired(proctoringPolicy) ||
           proctoringReady) && (
           <section
-            aria-hidden={warningState ? "true" : undefined}
-            className={warningState ? "exam-layout exam-paused" : "exam-layout"}
+            aria-hidden={warningState || serverAutoSubmitted ? "true" : undefined}
+            className={
+              warningState || serverAutoSubmitted
+                ? "exam-layout exam-paused"
+                : "exam-layout"
+            }
           >
             <aside className="question-palette">
               {attempt.questions.map((item, index) => {
@@ -766,7 +783,7 @@ export default function StudentAttemptPage({
                     onClick={() => {
                       setQuestion(index);
                     }}
-                    disabled={Boolean(warningState)}
+                    disabled={Boolean(warningState) || serverAutoSubmitted}
                     type="button"
                   >
                     {index + 1}
@@ -797,7 +814,9 @@ export default function StudentAttemptPage({
               )}
               <div className="form-actions">
                 <button
-                  disabled={current === 0 || Boolean(warningState)}
+                  disabled={
+                    current === 0 || Boolean(warningState) || serverAutoSubmitted
+                  }
                   onClick={() => {
                     setQuestion(current - 1);
                   }}
@@ -806,7 +825,7 @@ export default function StudentAttemptPage({
                   Previous
                 </button>
                 <button
-                  disabled={Boolean(warningState)}
+                  disabled={Boolean(warningState) || serverAutoSubmitted}
                   onClick={() => {
                     scheduleSave(question, "", true);
                   }}
@@ -816,7 +835,7 @@ export default function StudentAttemptPage({
                   Mark for Review
                 </button>
                 <button
-                  disabled={Boolean(warningState)}
+                  disabled={Boolean(warningState) || serverAutoSubmitted}
                   onClick={() => {
                     void clearAnswer();
                   }}
@@ -825,7 +844,7 @@ export default function StudentAttemptPage({
                   Clear Answer
                 </button>
                 <button
-                  disabled={Boolean(warningState)}
+                  disabled={Boolean(warningState) || serverAutoSubmitted}
                   onClick={() => {
                     setQuestion(
                       Math.min(current + 1, attempt.questions.length - 1),
@@ -838,7 +857,7 @@ export default function StudentAttemptPage({
                 </button>
                 <button
                   className="primary-action"
-                  disabled={Boolean(warningState)}
+                  disabled={Boolean(warningState) || serverAutoSubmitted}
                   onClick={() => {
                     void submit();
                   }}
@@ -857,7 +876,24 @@ export default function StudentAttemptPage({
             </article>
           </section>
         )}
-      {warningState && (
+      {serverAutoSubmitted && (
+        <div
+          aria-live="assertive"
+          className="exam-warning-overlay submitted"
+          role="alert"
+        >
+          <div className="exam-warning-panel">
+            <AlertTriangle aria-hidden="true" size={54} />
+            <p className="eyebrow">Exam automatically submitted</p>
+            <h2>Proctoring violation limit reached.</h2>
+            <p>
+              Your assessment has been submitted by the server. Redirecting to
+              the submission page...
+            </p>
+          </div>
+        </div>
+      )}
+      {warningState && !serverAutoSubmitted && (
         <div className="exam-warning-overlay" role="alertdialog" aria-modal="true">
           <div className="exam-warning-panel">
             <AlertTriangle aria-hidden="true" size={54} />

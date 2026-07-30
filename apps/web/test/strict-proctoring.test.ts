@@ -74,6 +74,10 @@ function main(): void {
   assert(attemptSource.includes('"BACK_NAVIGATION_ATTEMPT"'));
   assert(attemptSource.includes("Object.defineProperty(event, \"returnValue\""));
   assert(attemptSource.includes("lastViolationBurstRef"));
+  assert(attemptSource.includes("serverAutoSubmitted"));
+  assert(attemptSource.includes("Exam automatically submitted"));
+  assert(attemptSource.includes("stopCameraStream"));
+  assert(!attemptSource.includes("lastEventRef"));
   assert(helperSource.includes("proctoring/events/batch"));
   assert(helperSource.includes("proctoring/heartbeat"));
   assert(helperSource.includes("proctoring/evidence"));
