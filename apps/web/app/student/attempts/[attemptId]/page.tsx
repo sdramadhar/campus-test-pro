@@ -68,9 +68,10 @@ export default function StudentAttemptPage({
   const timerRef = useRef<number | undefined>(undefined);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const alarmRef = useRef<HTMLAudioElement | null>(null);
+  const alarmUnlockedRef = useRef(false);
+  const pendingAlarmReplayRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const proctorSequenceRef = useRef(1);
-  const lastViolationBurstRef = useRef(0);
   const autoSubmitRef = useRef(false);
   const queueKey = `campustest-answer-queue-${attemptId}`;
 
@@ -203,6 +204,30 @@ export default function StudentAttemptPage({
     document.body.classList.add("exam-body-lock");
     return () => {
       document.body.classList.remove("exam-body-lock");
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = new Audio("/audio/exam-alert.wav");
+    audio.preload = "auto";
+    audio.volume = 1.0;
+    audio.load();
+    alarmRef.current = audio;
+
+    const unlock = () => {
+      void unlockWarningAudio();
+    };
+    window.addEventListener("click", unlock, { passive: true });
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("mousemove", unlock, { passive: true });
+    window.addEventListener("touchstart", unlock, { passive: true });
+    return () => {
+      window.removeEventListener("click", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("mousemove", unlock);
+      window.removeEventListener("touchstart", unlock);
+      audio.pause();
+      alarmRef.current = null;
     };
   }, []);
 
@@ -389,6 +414,7 @@ export default function StudentAttemptPage({
       setViolationCount(result.violationCount);
       setRemainingChances(result.remainingChances);
       if (result.autoSubmitted) {
+        void playAlarm();
         autoSubmitRef.current = true;
         setServerAutoSubmitted(true);
         setAutoSubmitting(true);
@@ -408,6 +434,14 @@ export default function StudentAttemptPage({
       }
     }
     if (eventSeverity(eventType) !== "info") {
+      const countedViolation =
+        result?.diagnostics !== undefined
+          ? result.diagnostics.newViolationCount >
+            result.diagnostics.previousViolationCount
+          : true;
+      if (!countedViolation) {
+        return;
+      }
       const count = result?.violationCount ?? violationCount + 1;
       const chances =
         result?.remainingChances ??
@@ -426,11 +460,6 @@ export default function StudentAttemptPage({
     count: number,
     chances: number,
   ): void {
-    const now = Date.now();
-    if (now - lastViolationBurstRef.current < 1500) {
-      return;
-    }
-    lastViolationBurstRef.current = now;
     const allowed = proctoringPolicy?.allowedExamExitViolations ?? 2;
     setWarningState({
       eventType,
@@ -448,12 +477,46 @@ export default function StudentAttemptPage({
   async function playAlarm(): Promise<void> {
     const audio = alarmRef.current;
     if (!audio) return;
-    audio.currentTime = 0;
-    await audio.play().catch(() => undefined);
-    window.setTimeout(() => {
+    try {
+      audio.pause();
+      audio.volume = 1.0;
+      audio.currentTime = 0;
+      await audio.play();
+      alarmUnlockedRef.current = true;
+      pendingAlarmReplayRef.current = false;
+      console.log("Exam warning sound played");
+      window.setTimeout(() => {
+        audio.pause();
+        audio.currentTime = 0;
+      }, 3500);
+    } catch {
+      pendingAlarmReplayRef.current = true;
+    }
+  }
+
+  async function unlockWarningAudio(): Promise<void> {
+    if (alarmUnlockedRef.current && !pendingAlarmReplayRef.current) {
+      return;
+    }
+    const audio = alarmRef.current;
+    if (!audio) return;
+    if (pendingAlarmReplayRef.current) {
+      await playAlarm();
+      return;
+    }
+    try {
+      audio.pause();
+      audio.volume = 1.0;
+      audio.currentTime = 0;
+      audio.muted = true;
+      await audio.play();
       audio.pause();
       audio.currentTime = 0;
-    }, 3500);
+      audio.muted = false;
+      alarmUnlockedRef.current = true;
+    } catch {
+      audio.muted = false;
+    }
   }
 
   function stopCameraStream(): void {
@@ -697,7 +760,6 @@ export default function StudentAttemptPage({
       examMode
       title={attempt?.assessment.title ?? "Exam Attempt"}
     >
-      <audio preload="auto" ref={alarmRef} src="/audio/exam-alert.wav" />
       <section className="exam-banner exam-only-banner">
         <div>
           <p className="eyebrow">Live attempt</p>

@@ -71,9 +71,16 @@ function main(): void {
   assert(attemptSource.includes("Final Warning"));
   assert(attemptSource.includes("Return to Fullscreen"));
   assert(attemptSource.includes("/audio/exam-alert.wav"));
+  assert(attemptSource.includes("new Audio(\"/audio/exam-alert.wav\")"));
+  assert(attemptSource.includes("audio.preload = \"auto\""));
+  assert(attemptSource.includes("audio.volume = 1.0"));
+  assert(attemptSource.includes("audio.currentTime = 0"));
+  assert(attemptSource.includes("await audio.play()"));
+  assert(attemptSource.includes("pendingAlarmReplayRef"));
+  assert(attemptSource.includes("unlockWarningAudio"));
+  assert(attemptSource.includes("Exam warning sound played"));
   assert(attemptSource.includes('"BACK_NAVIGATION_ATTEMPT"'));
   assert(attemptSource.includes("Object.defineProperty(event, \"returnValue\""));
-  assert(attemptSource.includes("lastViolationBurstRef"));
   assert(attemptSource.includes("serverAutoSubmitted"));
   assert(attemptSource.includes("Exam automatically submitted"));
   assert(attemptSource.includes("stopCameraStream"));
