@@ -32,6 +32,16 @@ async function main(): Promise<void> {
   const { authenticatedFetch, responseErrorMessage } = await import(
     "../app/lib/api-client"
   );
+  const { normalizeApiUrl, signIn } = await import("../app/lib/auth");
+
+  assert.equal(
+    normalizeApiUrl("https://campus-test-pro.onrender.com/"),
+    "https://campus-test-pro.onrender.com",
+  );
+  assert.equal(
+    normalizeApiUrl("https://campus-test-pro.onrender.com/api/"),
+    "https://campus-test-pro.onrender.com/api",
+  );
 
   let calls = installFetch([jsonResponse({ ok: true }), jsonResponse({ ok: true })]);
   await Promise.all([
@@ -126,6 +136,29 @@ async function main(): Promise<void> {
 
   const message = await responseErrorMessage(new Response("", { status: 500 }));
   assert.equal(message, "Request failed with 500");
+
+  calls = installFetch([
+    jsonResponse({
+      accessToken: "access",
+      user: {
+        id: "user-1",
+        email: "admin@demo-college.local",
+        studentId: null,
+        name: "Admin",
+        role: "COLLEGE_ADMIN",
+        collegeId: "college-1",
+        collegeName: "Demo College",
+      },
+    }),
+  ]);
+  await signIn("admin@demo-college.local", "Admin@12345");
+  const loginCall = calls[0];
+  assert(loginCall);
+  assert.equal(
+    inputUrl(loginCall.input),
+    "https://campus-test-pro.onrender.com/api/v1/auth/login",
+  );
+  assert.equal(loginCall.init.credentials, "include");
 
   console.log("Web authenticated API client tests passed.");
 }

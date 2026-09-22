@@ -15,8 +15,32 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
-export const apiUrl =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const LOCAL_API_URL = "http://localhost:4000";
+const PRODUCTION_API_URL = "https://campus-test-pro.onrender.com";
+
+export class AuthRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+export function normalizeApiUrl(value: string | undefined): string {
+  const fallback =
+    process.env.NODE_ENV === "production" ? PRODUCTION_API_URL : LOCAL_API_URL;
+  const raw = (value?.trim() || fallback).replace(/\/+$/, "");
+
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return fallback;
+  }
+}
+
+export const apiUrl = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL);
 
 export const roleRoutes: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin/colleges",
@@ -31,6 +55,37 @@ export const roleLabels: Record<UserRole, string> = {
   FACULTY: "Faculty",
   STUDENT: "Student",
 };
+
+export async function signIn(
+  identifier: string,
+  password: string,
+): Promise<AuthResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/api/v1/auth/login`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier, password }),
+    });
+  } catch {
+    throw new AuthRequestError(
+      "CampusTest API is not reachable. Verify NEXT_PUBLIC_API_URL is set to the production API URL.",
+      0,
+    );
+  }
+
+  if (!response.ok) {
+    throw new AuthRequestError(
+      response.status === 403
+        ? "This account is disabled. Contact your college administrator."
+        : "Invalid email/student ID or password.",
+      response.status,
+    );
+  }
+
+  return (await response.json()) as AuthResponse;
+}
 
 export async function restoreSession(): Promise<AuthUser | null> {
   const me = await fetch(`${apiUrl}/api/v1/auth/me`, {

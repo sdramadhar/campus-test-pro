@@ -2,8 +2,10 @@ import {
   Body,
   Controller,
   Get,
+  HttpException,
   HttpCode,
   Inject,
+  Logger,
   Post,
   Req,
   Res,
@@ -13,6 +15,7 @@ import {
 import { ApiBody, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../../../generated/phase5-client";
 import { Request, Response } from "express";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { authCookieOptions } from "./auth-cookies";
 import { AuthService } from "./auth.service";
@@ -43,6 +46,8 @@ interface AuthHttpRequest extends Request {
 @ApiTags("auth")
 @Controller("api/v1/auth")
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post("login")
@@ -55,17 +60,31 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponseBody> {
     const parsed = this.parseLogin(dto);
-    const result = await this.authService.login(
-      parsed.identifier,
-      parsed.password,
-      {
+    const context = {
         ipAddress: request.ip ?? null,
         userAgent: request.get("user-agent") ?? null,
-      },
-    );
+      };
 
-    this.setAuthCookies(response, result.accessToken, result.refreshToken);
-    return { accessToken: result.accessToken, user: result.user };
+    try {
+      const result = await this.authService.login(
+        parsed.identifier,
+        parsed.password,
+        context,
+      );
+
+      this.logger.log(
+        `Login succeeded identifierHash=${this.identifierHash(parsed.identifier)} role=${result.user.role} ip=${context.ipAddress ?? "unknown"}`,
+      );
+
+      this.setAuthCookies(response, result.accessToken, result.refreshToken);
+      return { accessToken: result.accessToken, user: result.user };
+    } catch (error) {
+      const status = error instanceof HttpException ? error.getStatus() : 500;
+      this.logger.warn(
+        `Login failed status=${status.toString()} identifierHash=${this.identifierHash(parsed.identifier)} ip=${context.ipAddress ?? "unknown"}`,
+      );
+      throw error;
+    }
   }
 
   @Post("forgot-password")
@@ -178,5 +197,12 @@ export class AuthController {
     const options = authCookieOptions();
     response.clearCookie("accessToken", options.clearAccessToken);
     response.clearCookie("refreshToken", options.clearRefreshToken);
+  }
+
+  private identifierHash(identifier: string): string {
+    return createHash("sha256")
+      .update(identifier.trim().toLowerCase())
+      .digest("hex")
+      .slice(0, 16);
   }
 }

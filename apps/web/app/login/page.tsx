@@ -4,7 +4,7 @@ import { AlertCircle, BookOpenCheck, Loader2, LogIn } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SyntheticEvent, useEffect, useState } from "react";
-import { apiUrl, AuthResponse, roleRoutes, restoreSession } from "../lib/auth";
+import { roleRoutes, restoreSession, signIn } from "../lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,26 +43,18 @@ export default function LoginPage() {
     setError(null);
     setStatus("loading");
 
-    const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier, password }),
-    });
-
-    if (!response.ok) {
+    try {
+      const body = await signIn(identifier, password);
+      setStatus("success");
+      router.replace(roleRoutes[body.user.role]);
+    } catch (caught) {
       setStatus("idle");
       setError(
-        response.status === 403
-          ? "This account is disabled. Contact your college administrator."
-          : "Invalid email/student ID or password.",
+        caught instanceof Error
+          ? caught.message
+          : "Unable to reach CampusTest Pro. Please try again.",
       );
-      return;
     }
-
-    const body = (await response.json()) as AuthResponse;
-    setStatus("success");
-    router.replace(roleRoutes[body.user.role]);
   }
 
   const loading = status === "checking" || status === "loading";

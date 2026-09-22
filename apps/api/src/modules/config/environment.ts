@@ -398,15 +398,39 @@ export function env(): AppEnvironment {
 
 export function corsOrigins(): string | string[] {
   const current = env();
-  const raw =
-    current.CORS_ORIGINS ??
-    current.WEB_ORIGIN ??
-    current.FRONTEND_URL ??
-    "http://localhost:3000";
-  return raw.includes(",")
-    ? raw
-        .split(",")
-        .map((origin) => origin.trim())
-        .filter(Boolean)
-    : raw;
+  const configured = [
+    ...(current.CORS_ORIGINS?.split(",") ?? []),
+    current.WEB_ORIGIN,
+    current.FRONTEND_URL,
+  ];
+  const origins = Array.from(
+    new Set(
+      configured
+        .map((origin) => normalizeOrigin(origin))
+        .filter((origin): origin is string => Boolean(origin)),
+    ),
+  );
+
+  if (origins.length === 0) {
+    return "http://localhost:3000";
+  }
+
+  if (origins.length === 1) {
+    return origins[0] ?? "http://localhost:3000";
+  }
+
+  return origins;
+}
+
+function normalizeOrigin(origin: string | undefined): string | null {
+  const trimmed = origin?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
 }
