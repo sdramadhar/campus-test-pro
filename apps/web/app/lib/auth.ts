@@ -17,6 +17,7 @@ export interface AuthResponse {
 
 const LOCAL_API_URL = "http://localhost:4000";
 const PRODUCTION_API_URL = "https://campus-test-pro.onrender.com";
+const SESSION_RESTORE_TIMEOUT_MS = 3500;
 
 export class AuthRequestError extends Error {
   constructor(
@@ -87,26 +88,66 @@ export async function signIn(
   return (await response.json()) as AuthResponse;
 }
 
-export async function restoreSession(): Promise<AuthUser | null> {
-  const me = await fetch(`${apiUrl}/api/v1/auth/me`, {
-    credentials: "include",
-    cache: "no-store",
-  });
+export async function restoreSession(
+  timeoutMs = SESSION_RESTORE_TIMEOUT_MS,
+): Promise<AuthUser | null> {
+  let me: Response;
+  try {
+    me = await fetchWithTimeout(
+      `${apiUrl}/api/v1/auth/me`,
+      {
+        credentials: "include",
+        cache: "no-store",
+      },
+      timeoutMs,
+    );
+  } catch {
+    return null;
+  }
   if (me.ok) {
     return (await me.json()) as AuthUser;
   }
 
-  const refresh = await fetch(`${apiUrl}/api/v1/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    cache: "no-store",
-  });
+  let refresh: Response;
+  try {
+    refresh = await fetchWithTimeout(
+      `${apiUrl}/api/v1/auth/refresh`,
+      {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      },
+      timeoutMs,
+    );
+  } catch {
+    return null;
+  }
   if (!refresh.ok) {
     return null;
   }
 
   const body = (await refresh.json()) as AuthResponse;
   return body.user;
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
 }
 
 export async function requestPasswordReset(identifier: string): Promise<void> {

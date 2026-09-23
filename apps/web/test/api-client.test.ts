@@ -28,11 +28,26 @@ function installFetch(responses: Response[]): FetchCall[] {
   return calls;
 }
 
+function installHangingFetch(): FetchCall[] {
+  const calls: FetchCall[] = [];
+  globalThis.fetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ input: _input, init: init ?? {} });
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("The operation was aborted.", "AbortError"));
+      });
+    });
+  };
+  return calls;
+}
+
 async function main(): Promise<void> {
   const { authenticatedFetch, responseErrorMessage } = await import(
     "../app/lib/api-client"
   );
-  const { normalizeApiUrl, signIn } = await import("../app/lib/auth");
+  const { normalizeApiUrl, restoreSession, signIn } = await import(
+    "../app/lib/auth"
+  );
 
   assert.equal(
     normalizeApiUrl("https://campus-test-pro.onrender.com/"),
@@ -43,7 +58,38 @@ async function main(): Promise<void> {
     "https://campus-test-pro.onrender.com/api",
   );
 
-  let calls = installFetch([jsonResponse({ ok: true }), jsonResponse({ ok: true })]);
+  let calls = installFetch([
+    jsonResponse({ message: "Authentication required" }, { status: 401 }),
+    jsonResponse({ message: "Refresh token required" }, { status: 401 }),
+  ]);
+  assert.equal(await restoreSession(50), null);
+  assert.equal(calls.length, 2);
+  const meCall = calls[0];
+  const refreshCall = calls[1];
+  assert(meCall);
+  assert(refreshCall);
+  assert.equal(
+    inputUrl(meCall.input),
+    "https://campus-test-pro.onrender.com/api/v1/auth/me",
+  );
+  assert.equal(meCall.init.credentials, "include");
+  assert.equal(
+    inputUrl(refreshCall.input),
+    "https://campus-test-pro.onrender.com/api/v1/auth/refresh",
+  );
+  assert.equal(refreshCall.init.credentials, "include");
+
+  calls = installHangingFetch();
+  assert.equal(await restoreSession(5), null);
+  assert.equal(calls.length, 1);
+  const hangingMeCall = calls[0];
+  assert(hangingMeCall);
+  assert.equal(
+    inputUrl(hangingMeCall.input),
+    "https://campus-test-pro.onrender.com/api/v1/auth/me",
+  );
+
+  calls = installFetch([jsonResponse({ ok: true }), jsonResponse({ ok: true })]);
   await Promise.all([
     authenticatedFetch("/api/v1/students/template"),
     authenticatedFetch("/api/v1/students/template"),
