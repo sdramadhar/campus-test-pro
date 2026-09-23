@@ -4,6 +4,8 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -33,14 +35,34 @@ interface AuthResult {
   user: AuthenticatedUser;
 }
 
+interface LocalRateLimitEntry {
+  attempts: number;
+  expiresAt: number;
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  private readonly localRateLimits = new Map<string, LocalRateLimitEntry>();
+
   private readonly accessTokenTtlSeconds = Number(
     process.env.ACCESS_TOKEN_TTL_SECONDS ?? 900,
   );
 
   private readonly refreshTokenTtlSeconds = Number(
     process.env.REFRESH_TOKEN_TTL_SECONDS ?? 604800,
+  );
+
+  private readonly loginDependencyTimeoutMs = Number(
+    process.env.AUTH_DEPENDENCY_TIMEOUT_MS ?? 5000,
+  );
+
+  private readonly rateLimitTimeoutMs = Number(
+    process.env.AUTH_RATE_LIMIT_TIMEOUT_MS ?? 1500,
+  );
+
+  private readonly auditTimeoutMs = Number(
+    process.env.AUTH_AUDIT_TIMEOUT_MS ?? 1500,
   );
 
   constructor(
@@ -55,20 +77,27 @@ export class AuthService {
     password: string,
     context: RequestContext,
   ): Promise<AuthResult> {
+    const identifierHash = this.hashIdentifier(identifier);
+    this.logger.log(`LOGIN_REQUEST_RECEIVED identifierHash=${identifierHash}`);
     await this.enforceLoginRateLimit(identifier, context.ipAddress);
 
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: { equals: identifier, mode: "insensitive" } },
-          { studentId: { equals: identifier, mode: "insensitive" } },
-        ],
-      },
-      include: { college: true },
-    });
+    this.logger.log(`LOGIN_USER_LOOKUP identifierHash=${identifierHash}`);
+    const user = await this.withTimeout(
+      this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: identifier, mode: "insensitive" } },
+            { studentId: { equals: identifier, mode: "insensitive" } },
+          ],
+        },
+        include: { college: true },
+      }),
+      this.loginDependencyTimeoutMs,
+      "LOGIN_USER_LOOKUP",
+    );
 
     if (!user || !user.passwordHash) {
-      await this.audit(AuditEvent.LOGIN_FAILURE, null, null, null, {
+      await this.safeAudit(AuditEvent.LOGIN_FAILURE, null, null, null, {
         identifier,
         reason: "invalid_credentials",
       });
@@ -81,7 +110,7 @@ export class AuthService {
         (!user.college.isActive ||
           user.college.status !== CollegeStatus.ACTIVE))
     ) {
-      await this.audit(
+      await this.safeAudit(
         AuditEvent.LOGIN_FAILURE,
         user.id,
         user.collegeId,
@@ -93,9 +122,14 @@ export class AuthService {
       throw new ForbiddenException("This account is disabled.");
     }
 
-    const passwordMatches = await argon2.verify(user.passwordHash, password);
+    this.logger.log(`LOGIN_PASSWORD_CHECK identifierHash=${identifierHash}`);
+    const passwordMatches = await this.withTimeout(
+      argon2.verify(user.passwordHash, password),
+      this.loginDependencyTimeoutMs,
+      "LOGIN_PASSWORD_CHECK",
+    );
     if (!passwordMatches) {
-      await this.audit(
+      await this.safeAudit(
         AuditEvent.LOGIN_FAILURE,
         user.id,
         user.collegeId,
@@ -107,8 +141,9 @@ export class AuthService {
       throw new UnauthorizedException("Invalid email/student ID or password.");
     }
 
+    this.logger.log(`LOGIN_SESSION_CREATE identifierHash=${identifierHash}`);
     const authResult = await this.createSession(user, context);
-    await this.audit(
+    await this.safeAudit(
       AuditEvent.LOGIN_SUCCESS,
       user.id,
       user.collegeId,
@@ -118,6 +153,7 @@ export class AuthService {
       },
     );
 
+    this.logger.log(`LOGIN_RESPONSE identifierHash=${identifierHash}`);
     return authResult;
   }
 
@@ -156,7 +192,7 @@ export class AuthService {
       },
     });
 
-    await this.audit(
+    await this.safeAudit(
       AuditEvent.REFRESH,
       storedToken.user.id,
       storedToken.user.collegeId,
@@ -178,7 +214,7 @@ export class AuthService {
       });
     }
 
-    await this.audit(
+    await this.safeAudit(
       AuditEvent.LOGOUT,
       user?.id ?? null,
       user?.collegeId ?? null,
@@ -223,7 +259,7 @@ export class AuthService {
         (!user.college.isActive ||
           user.college.status !== CollegeStatus.ACTIVE))
     ) {
-      await this.audit(
+      await this.safeAudit(
         AuditEvent.PASSWORD_RESET_REQUEST,
         user?.id ?? null,
         user?.collegeId ?? null,
@@ -263,7 +299,7 @@ export class AuthService {
         expiresMinutes: 30,
       },
     });
-    await this.audit(
+    await this.safeAudit(
       AuditEvent.PASSWORD_RESET_REQUEST,
       user.id,
       user.collegeId,
@@ -342,15 +378,19 @@ export class AuthService {
     const refreshToken = randomBytes(48).toString("base64url");
     const expiresAt = new Date(Date.now() + this.refreshTokenTtlSeconds * 1000);
 
-    await this.prisma.refreshToken.create({
-      data: {
-        tokenHash: this.hashToken(refreshToken),
-        userId: user.id,
-        expiresAt,
-        userAgent: context.userAgent,
-        ipAddress: context.ipAddress,
-      },
-    });
+    await this.withTimeout(
+      this.prisma.refreshToken.create({
+        data: {
+          tokenHash: this.hashToken(refreshToken),
+          userId: user.id,
+          expiresAt,
+          userAgent: context.userAgent,
+          ipAddress: context.ipAddress,
+        },
+      }),
+      this.loginDependencyTimeoutMs,
+      "LOGIN_SESSION_CREATE",
+    );
 
     return { accessToken, refreshToken, user: profile };
   }
@@ -384,15 +424,44 @@ export class AuthService {
     return createHash("sha256").update(token).digest("hex");
   }
 
+  private hashIdentifier(identifier: string): string {
+    return createHash("sha256")
+      .update(identifier.trim().toLowerCase())
+      .digest("hex")
+      .slice(0, 16);
+  }
+
   private async enforceLoginRateLimit(
     identifier: string,
     ipAddress: string | null,
   ): Promise<void> {
     const normalized = identifier.trim().toLowerCase();
     const key = `login-rate:${ipAddress ?? "unknown"}:${normalized}`;
-    const attempts = await this.redis.client.incr(key);
-    if (attempts === 1) {
-      await this.redis.client.expire(key, 15 * 60);
+    let attempts: number;
+    try {
+      attempts = await this.withTimeout(
+        this.redis.client.incr(key),
+        this.rateLimitTimeoutMs,
+        "LOGIN_RATE_LIMIT",
+      );
+      if (attempts === 1) {
+        await this.withTimeout(
+          this.redis.client.expire(key, 15 * 60),
+          this.rateLimitTimeoutMs,
+          "LOGIN_RATE_LIMIT_EXPIRE",
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `LOGIN_RATE_LIMIT_UNAVAILABLE identifierHash=${this.hashIdentifier(identifier)} reason=${error instanceof Error ? error.message : "unknown"}`,
+      );
+      this.enforceLocalRateLimit(
+        key,
+        10,
+        15 * 60 * 1000,
+        "Too many login attempts. Try again later.",
+      );
+      return;
     }
 
     if (attempts > 10) {
@@ -409,9 +478,31 @@ export class AuthService {
   ): Promise<void> {
     const normalized = identifier.trim().toLowerCase();
     const key = `password-reset-rate:${ipAddress ?? "unknown"}:${normalized}`;
-    const attempts = await this.redis.client.incr(key);
-    if (attempts === 1) {
-      await this.redis.client.expire(key, 60 * 60);
+    let attempts: number;
+    try {
+      attempts = await this.withTimeout(
+        this.redis.client.incr(key),
+        this.rateLimitTimeoutMs,
+        "PASSWORD_RESET_RATE_LIMIT",
+      );
+      if (attempts === 1) {
+        await this.withTimeout(
+          this.redis.client.expire(key, 60 * 60),
+          this.rateLimitTimeoutMs,
+          "PASSWORD_RESET_RATE_LIMIT_EXPIRE",
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `PASSWORD_RESET_RATE_LIMIT_UNAVAILABLE identifierHash=${this.hashIdentifier(identifier)} reason=${error instanceof Error ? error.message : "unknown"}`,
+      );
+      this.enforceLocalRateLimit(
+        key,
+        5,
+        60 * 60 * 1000,
+        "Too many password reset attempts. Try again later.",
+      );
+      return;
     }
     if (attempts > 5) {
       throw new HttpException(
@@ -437,5 +528,77 @@ export class AuthService {
         metadata,
       },
     });
+  }
+
+  private enforceLocalRateLimit(
+    key: string,
+    limit: number,
+    windowMs: number,
+    message: string,
+  ): void {
+    const now = Date.now();
+    const current = this.localRateLimits.get(key);
+    const next =
+      current && current.expiresAt > now
+        ? { attempts: current.attempts + 1, expiresAt: current.expiresAt }
+        : { attempts: 1, expiresAt: now + windowMs };
+    this.localRateLimits.set(key, next);
+    this.pruneLocalRateLimits(now);
+
+    if (next.attempts > limit) {
+      throw new HttpException(message, HttpStatus.TOO_MANY_REQUESTS);
+    }
+  }
+
+  private pruneLocalRateLimits(now: number): void {
+    if (this.localRateLimits.size < 1000) {
+      return;
+    }
+    for (const [key, value] of this.localRateLimits.entries()) {
+      if (value.expiresAt <= now) {
+        this.localRateLimits.delete(key);
+      }
+    }
+  }
+
+  private async safeAudit(
+    event: AuditEvent,
+    userId: string | null,
+    collegeId: string | null,
+    actorRole: Role | null,
+    metadata: Prisma.InputJsonValue,
+  ): Promise<void> {
+    try {
+      await this.withTimeout(
+        this.audit(event, userId, collegeId, actorRole, metadata),
+        this.auditTimeoutMs,
+        `AUDIT_${event}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `AUTH_AUDIT_UNAVAILABLE event=${event} reason=${error instanceof Error ? error.message : "unknown"}`,
+      );
+    }
+  }
+
+  private async withTimeout<T>(
+    operation: Promise<T>,
+    timeoutMs: number,
+    stage: string,
+  ): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => {
+        reject(new ServiceUnavailableException(`${stage} timed out.`));
+      }, timeoutMs);
+    });
+
+    try {
+      return await Promise.race([operation, timeoutPromise]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
   }
 }
