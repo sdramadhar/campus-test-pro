@@ -46,7 +46,7 @@ async function bootstrap(): Promise<void> {
   }
 
   const port = env().PORT ?? env().API_PORT;
-  await app.listen(port);
+  await app.listen(port, "0.0.0.0");
 }
 
 void bootstrap();

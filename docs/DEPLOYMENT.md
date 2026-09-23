@@ -28,10 +28,12 @@ Provider option A: Render-style managed platform
 - API web service for NestJS.
 - API build command: `npm ci --include=dev && npm run db:generate && npm run build --workspace apps/api`.
 - API start command: `npm run render:api:start`.
+- API release command: `npm run render:api:release` as a one-time/pre-deploy job after PostgreSQL is configured.
+- API health check path: `/health`.
 - Background worker service.
 - Managed PostgreSQL and Redis.
 - Environment-scoped secrets.
-- API startup runs `prisma migrate deploy`, then the idempotent production demo-user seed, then starts NestJS.
+- API startup must start NestJS directly on Render's `PORT`; migrations and the idempotent production demo-user seed run as the separate release command so the web service can bind and answer `/health` quickly.
 
 Provider option B: AWS ECS/Fargate or Kubernetes
 

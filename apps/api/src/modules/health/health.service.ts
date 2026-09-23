@@ -18,6 +18,10 @@ export interface ReadinessResponse {
 
 @Injectable()
 export class HealthService {
+  private readonly dependencyTimeoutMs = Number(
+    process.env.HEALTH_DEPENDENCY_TIMEOUT_MS ?? 2000,
+  );
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(RedisService) private readonly redis: RedisService,
@@ -49,7 +53,10 @@ export class HealthService {
 
   private async checkPostgres(): Promise<DependencyStatus> {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.withTimeout(
+        this.prisma.$queryRaw`SELECT 1`,
+        "postgres health check",
+      );
       return "ok";
     } catch {
       return "error";
@@ -58,7 +65,7 @@ export class HealthService {
 
   private async checkRedis(): Promise<DependencyStatus> {
     try {
-      await this.redis.client.ping();
+      await this.withTimeout(this.redis.client.ping(), "redis health check");
       return "ok";
     } catch {
       return "error";
@@ -70,10 +77,13 @@ export class HealthService {
       if (process.env.WORKER_REQUIRED === "false") {
         return "ok";
       }
-      const heartbeat = await this.prisma.workerHeartbeat.findFirst({
-        where: { service: "worker", expiresAt: { gt: new Date() } },
-        orderBy: { lastSeenAt: "desc" },
-      });
+      const heartbeat = await this.withTimeout(
+        this.prisma.workerHeartbeat.findFirst({
+          where: { service: "worker", expiresAt: { gt: new Date() } },
+          orderBy: { lastSeenAt: "desc" },
+        }),
+        "worker health check",
+      );
       if (heartbeat) {
         return "ok";
       }
@@ -86,8 +96,16 @@ export class HealthService {
   private async checkQueues(): Promise<DependencyStatus> {
     try {
       const key = "campustest:health:queues";
-      await this.redis.client.set(key, "ok", "EX", 30);
-      return (await this.redis.client.get(key)) === "ok" ? "ok" : "error";
+      await this.withTimeout(
+        this.redis.client.set(key, "ok", "EX", 30),
+        "queue write health check",
+      );
+      return (await this.withTimeout(
+        this.redis.client.get(key),
+        "queue read health check",
+      )) === "ok"
+        ? "ok"
+        : "error";
     } catch {
       return "error";
     }
@@ -95,11 +113,31 @@ export class HealthService {
 
   private async checkMigrations(): Promise<DependencyStatus> {
     try {
-      await this.prisma
-        .$queryRaw`SELECT COUNT(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL`;
+      await this.withTimeout(
+        this.prisma
+          .$queryRaw`SELECT COUNT(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL`,
+        "migration health check",
+      );
       return "ok";
     } catch {
       return "error";
+    }
+  }
+
+  private async withTimeout<T>(operation: Promise<T>, label: string): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => {
+        reject(new Error(`${label} timed out.`));
+      }, this.dependencyTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([operation, timeoutPromise]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
   }
 }
